@@ -20,6 +20,7 @@ export function initAudio() {
 export function setMuted(m: boolean) {
   muted = m;
   if (rotorGain) rotorGain.gain.value = m ? 0 : 0.012;
+  setMusicMuted(m);
 }
 
 export function isMuted() { return muted; }
@@ -170,4 +171,123 @@ export function stopRotor() {
   rotorOsc = null;
   rotorLfo = null;
   rotorGain = null;
+}
+
+// ===== Background music (HTMLAudio, fades on biome transitions) =====
+// Only the first 3 biomes have music; later ones are silent.
+
+const MUSIC_TRACKS: Record<number, string> = {
+  0: "/music/thrust-into-orbit.mp3",   // CAVE
+  1: "/music/sector-seven-breach.mp3", // DAWN
+  2: "/music/last-corridor.mp3",       // DEEP OCEAN
+};
+
+const MUSIC_TARGET_VOL = 0.32;
+const FADE_DURATION_MS = 1100;
+
+type Track = { el: HTMLAudioElement; url: string };
+
+let activeTrack: Track | null = null;
+let fadingOut: Track[] = [];
+let fadeRaf: number | null = null;
+let lastFadeTime = 0;
+let musicMuted = false;
+
+function approach(current: number, goal: number, step: number) {
+  if (current < goal) return Math.min(goal, current + step);
+  return Math.max(goal, current - step);
+}
+
+function ensureFadeLoop() {
+  if (fadeRaf !== null) return;
+  lastFadeTime = performance.now();
+  const tick = (now: number) => {
+    const dt = now - lastFadeTime;
+    lastFadeTime = now;
+    const step = dt / FADE_DURATION_MS;
+
+    if (activeTrack) {
+      const goal = musicMuted ? 0 : MUSIC_TARGET_VOL;
+      if (Math.abs(activeTrack.el.volume - goal) > 0.001) {
+        activeTrack.el.volume = approach(activeTrack.el.volume, goal, step);
+      }
+    }
+
+    if (fadingOut.length > 0) {
+      fadingOut = fadingOut.filter(t => {
+        t.el.volume = approach(t.el.volume, 0, step);
+        if (t.el.volume <= 0.001) {
+          try { t.el.pause(); } catch { /* ignore */ }
+          t.el.src = "";
+          return false;
+        }
+        return true;
+      });
+    }
+
+    const activeAtGoal = !activeTrack ||
+      Math.abs(activeTrack.el.volume - (musicMuted ? 0 : MUSIC_TARGET_VOL)) <= 0.001;
+    if (activeAtGoal && fadingOut.length === 0) {
+      fadeRaf = null;
+      return;
+    }
+    fadeRaf = requestAnimationFrame(tick);
+  };
+  fadeRaf = requestAnimationFrame(tick);
+}
+
+// Switch background music to the track configured for the given biome index.
+// Pass -1 (or any unmapped index) to fade out and leave silent.
+export function setMusicForBiome(biomeIdx: number) {
+  const url = MUSIC_TRACKS[biomeIdx] ?? null;
+
+  // Already on this track — nothing to do.
+  if (activeTrack && activeTrack.url === url) return;
+  if (!activeTrack && url === null) return;
+
+  // Demote current active to fading-out.
+  if (activeTrack) {
+    fadingOut.push(activeTrack);
+    activeTrack = null;
+  }
+
+  if (url) {
+    try {
+      const el = new Audio(url);
+      el.loop = true;
+      el.volume = 0;
+      // play() can reject if no user gesture has occurred yet; harmless to ignore.
+      el.play().catch(() => { /* will retry implicitly when user gestures */ });
+      activeTrack = { el, url };
+    } catch {
+      // Audio not supported in this env — degrade silently.
+    }
+  }
+
+  ensureFadeLoop();
+}
+
+export function pauseMusic() {
+  if (activeTrack) {
+    try { activeTrack.el.pause(); } catch { /* ignore */ }
+  }
+}
+
+export function resumeMusic() {
+  if (activeTrack) {
+    activeTrack.el.play().catch(() => { /* ignore */ });
+  }
+}
+
+export function stopMusic() {
+  if (activeTrack) {
+    fadingOut.push(activeTrack);
+    activeTrack = null;
+    ensureFadeLoop();
+  }
+}
+
+export function setMusicMuted(m: boolean) {
+  musicMuted = m;
+  ensureFadeLoop();
 }

@@ -36,6 +36,7 @@ import {
   playPowerUp, playCrash, playSawBuzz,
   playNearMiss, playBiomeTransition, playComboUp, playLifeLost,
   startRotor, stopRotor,
+  setMusicForBiome, pauseMusic, resumeMusic, stopMusic,
 } from "./sound";
 
 export default function HelicopterGame() {
@@ -77,6 +78,11 @@ export default function HelicopterGame() {
         if (!merged.sound) setAudioMuted(true);
       }
     } catch { /* ignore parse errors */ }
+    // Stop audio if the user navigates away from the game.
+    return () => {
+      stopMusic();
+      stopRotor();
+    };
   }, []);
 
   const updateSetting = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
@@ -247,6 +253,7 @@ export default function HelicopterGame() {
     setPaused(false);
     setBiomeBanner(null);
     startRotor();
+    setMusicForBiome(0);
   }, [rebuildStars]);
 
   const showBanner = (text: string, ms = 1800) => {
@@ -307,6 +314,7 @@ export default function HelicopterGame() {
           rebuildStars(newBiomeIdx);
           showBanner(BIOMES[newBiomeIdx].name, 1800);
           playBiomeTransition();
+          setMusicForBiome(newBiomeIdx);
         }
 
         // ---- Scroll obstacles ----
@@ -636,6 +644,7 @@ export default function HelicopterGame() {
           s.shake = 22;
           s.running = false;
           stopRotor();
+          stopMusic();
           playCrash();
           const finalScore = s.score;
           setScore(finalScore);
@@ -928,6 +937,7 @@ export default function HelicopterGame() {
         const newPaused = !stateRef.current.paused;
         stateRef.current.paused = newPaused;
         setPaused(newPaused);
+        if (newPaused) pauseMusic(); else resumeMusic();
         return;
       }
       if (e.code !== "Space") return;
