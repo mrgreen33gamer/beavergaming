@@ -1,26 +1,102 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Warm retro arcade palette */
+  --background: #1a0e0a;
+  --surface: #2a1810;
+  --surface-2: #3a2218;
+  --border: #4a2e1f;
+  --foreground: #f5e8d0;
+  --muted: #b8a088;
+  --accent: #ff6b1a;
+  --accent-hot: #ff8a3d;
+  --crt-green: #7fd650;
+  --danger: #d63d3d;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hot: var(--accent-hot);
+  --color-crt-green: var(--crt-green);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-mono: var(--font-vt323);
+  --font-display: var(--font-press-start);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(255, 107, 26, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(127, 214, 80, 0.04) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* CRT scanline overlay used on game thumbnails and the player */
+.crt {
+  position: relative;
+  overflow: hidden;
+}
+.crt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.15) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+  mix-blend-mode: multiply;
+}
+
+/* Pixel-edge effect for retro tiles */
+.pixel-edge {
+  box-shadow:
+    0 0 0 2px var(--border),
+    0 4px 0 0 rgba(0, 0, 0, 0.5);
+}
+
+.pixel-edge:hover {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 6px 0 0 rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Wiggle animation for hover */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg) translateY(-2px); }
+  25% { transform: rotate(-1deg) translateY(-2px); }
+  75% { transform: rotate(1deg) translateY(-2px); }
+}
+
+.pixel-edge:hover .tile-emoji {
+  animation: wiggle 0.4s ease-in-out infinite;
+}
+
+/* Flicker for "LIVE" / "NEW" badges */
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.flicker {
+  animation: flicker 1.4s ease-in-out infinite;
+}
+
+/* Canvas containers should not bleed */
+canvas {
+  display: block;
+  image-rendering: pixelated;
 }

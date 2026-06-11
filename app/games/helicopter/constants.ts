@@ -1,0 +1,85 @@
+import type { Difficulty } from "./types";
+
+// ===== Arena =====
+export const WIDTH = 800;
+export const HEIGHT = 400;
+
+// ===== Helicopter =====
+export const HELI_X = 120;
+export const HELI_W = 40;
+export const HELI_H = 18;
+
+// ===== Physics =====
+export const GRAVITY = 0.34;
+export const LIFT = -0.56;
+export const SCROLL_SPEED = 3.2;
+// More aggressive ramp so late biomes feel different to fly.
+export const SPEED_RAMP = 0.0014;
+
+// ===== Obstacles =====
+export const OBSTACLE_GAP_DEFAULT = 130;
+export const OBSTACLE_GAP_NARROW = 96;
+export const OBSTACLE_WIDTH = 64;
+export const OBSTACLE_SPACING = 240;
+
+// ===== Easy mode gives wider gaps =====
+export const EASY_GAP_BONUS = 18;
+
+// ===== Pickups =====
+export const PICKUP_SIZE = 14;
+export const PICKUP_HITBOX = 22;
+// Pickup spawns at x = lastObstacle.x + this offset (in the gap to next pillar).
+export const PICKUP_OFFSET_FROM_PILLAR = 120;
+// Per-pickup-slot roll chances (mutually exclusive, fall through):
+export const GOLD_GEM_CHANCE = 0.06;
+export const RED_GEM_CHANCE = 0.04;
+export const GREEN_GEM_CHANCE = 0.10;
+export const POWERUP_CHANCE = 0.05;
+export const BLUE_GEM_CHANCE = 0.40;
+// (remaining ~35% is no pickup, gives natural rhythm)
+
+// ===== Power-up effects =====
+export const MAGNET_RADIUS = 200;
+export const MAGNET_RADIUS_SQ = MAGNET_RADIUS * MAGNET_RADIUS;
+export const MAGNET_DURATION_MS = 5000;
+export const SLOWMO_DURATION_MS = 4000;
+export const SLOWMO_FACTOR = 0.5;
+// Brief invulnerability after shield consumed
+export const SHIELD_GRACE_MS = 700;
+
+// ===== Scoring =====
+export const BLUE_GEM_POINTS = 25;
+export const GREEN_GEM_POINTS = 50;
+export const RED_GEM_POINTS = 75;
+export const GOLD_GEM_POINTS = 100;
+
+// ===== Perf safety =====
+export const MAX_PARTICLES = 200;
+
+// ===== Visuals =====
+// Heli tilt: angle = clamp(vy * TILT_FACTOR, -TILT_MAX, +TILT_MAX)
+export const TILT_FACTOR = 0.05;
+export const TILT_MAX = 0.45;
+
+// ===== Wall scrape =====
+// How close to a pillar edge before sparks fly (still alive).
+export const SCRAPE_THRESHOLD = 5;
+export const SCRAPE_COOLDOWN_MS = 80;
+
+// ===== Near-miss bonus =====
+export const NEAR_MISS_POINTS = 5;
+export const NEAR_MISS_COOLDOWN_MS = 500;
+
+// ===== Combo system =====
+export const COMBO_TIMEOUT_MS = 4000;
+export const COMBO_MULTIPLIER_THRESHOLDS = [3, 6, 10]; // x2 at 3 gems, x3 at 6, x4 at 10
+
+// ===== Lives (Easy mode) =====
+export const EASY_LIVES = 3;
+export const INVULN_AFTER_HIT_MS = 2000;
+
+// ===== High-score keys =====
+export const HIGHSCORE_KEY: Record<Difficulty, string> = {
+  easy: "heli-highscore-easy",
+  hard: "heli-highscore-hard",
+};

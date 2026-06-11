@@ -1,65 +1,79 @@
-import Image from "next/image";
+import Link from "next/link";
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+import CategoryCarousel from "./components/CategoryCarousel";
+import { games, getFeaturedGame, categories } from "@/lib/games";
 
 export default function Home() {
+  const featured = getFeaturedGame();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <>
+      <Header />
+      <main className="flex-1 max-w-6xl mx-auto px-6 py-8 w-full">
+        {/* Hero banner */}
+        <section className="mb-10">
+          <div className="rounded-lg overflow-hidden border border-[var(--border)] bg-[var(--surface)]">
+            <div className="grid sm:grid-cols-2">
+              <div className="p-8 flex flex-col justify-center">
+                <p className="font-[family-name:var(--font-mono)] text-base text-[var(--crt-green)] uppercase tracking-wider mb-2">
+                  &gt;&gt; Featured Game
+                </p>
+                <h2 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl text-[var(--foreground)] leading-relaxed mb-3">
+                  {featured.title.toUpperCase()}
+                </h2>
+                <p className="font-[family-name:var(--font-mono)] text-xl text-[var(--muted)] mb-6 leading-snug">
+                  {featured.description}
+                </p>
+                <Link
+                  href={`/play/${featured.slug}`}
+                  className="pixel-edge inline-block self-start px-6 py-3 rounded-lg font-[family-name:var(--font-display)] text-sm text-[var(--background)] transition-all"
+                  style={{ background: featured.accent }}
+                >
+                  ▶ PLAY NOW
+                </Link>
+              </div>
+              <div
+                className="crt min-h-[240px] flex items-center justify-center relative"
+                style={{
+                  background: `linear-gradient(135deg, ${featured.accent}33 0%, ${featured.accent}11 100%)`,
+                }}
+              >
+                <span
+                  className="text-[12rem] drop-shadow-2xl"
+                  style={{ filter: `drop-shadow(0 0 32px ${featured.accent})` }}
+                >
+                  {featured.emoji}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Library summary */}
+        <div className="flex items-baseline justify-between mb-5">
+          <h2 className="font-[family-name:var(--font-display)] text-sm text-[var(--foreground)]">BROWSE BY GENRE</h2>
+          <p className="font-[family-name:var(--font-mono)] text-lg text-[var(--muted)]">
+            {games.length} games &middot; {categories.length} categories
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+        {/* One carousel per category */}
+        {categories.map((cat) => {
+          const inCat = games.filter((g) => g.category === cat.id);
+          if (inCat.length === 0) return null;
+          return <CategoryCarousel key={cat.id} label={cat.label} games={inCat} />;
+        })}
+
+        {/* Retro footer note */}
+        <section className="mt-12 text-center">
+          <p className="font-[family-name:var(--font-mono)] text-lg text-[var(--muted)]">
+            <span className="text-[var(--crt-green)]">█</span> Tip: All games work
+            on desktop. Mobile support varies by game.
+          </p>
+        </section>
       </main>
-    </div>
+      <Footer />
+    </>
   );
 }
