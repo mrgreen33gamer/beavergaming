@@ -174,12 +174,16 @@ export function stopRotor() {
 }
 
 // ===== Background music (HTMLAudio, fades on biome transitions) =====
-// Only the first 3 biomes have music; later ones are silent.
+// One track per biome.
 
 const MUSIC_TRACKS: Record<number, string> = {
-  0: "/music/thrust-into-orbit.mp3",   // CAVE
-  1: "/music/sector-seven-breach.mp3", // DAWN
-  2: "/music/last-corridor.mp3",       // DEEP OCEAN
+  0: "/music/cave.mp3",
+  1: "/music/dawn.mp3",
+  2: "/music/deep-ocean.mp3",
+  3: "/music/storm.mp3",
+  4: "/music/volcano.mp3",
+  5: "/music/neon-city.mp3",
+  6: "/music/deep-space.mp3",
 };
 
 const MUSIC_TARGET_VOL = 0.32;
