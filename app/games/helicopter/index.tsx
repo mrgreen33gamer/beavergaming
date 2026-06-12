@@ -42,6 +42,7 @@ import {
   playNearMiss, playBiomeTransition, playComboUp, playLifeLost,
   startRotor, stopRotor,
   setMusicForBiome, pauseMusic, resumeMusic, stopMusic,
+  preloadMusic, getMusicTrackCount,
 } from "./sound";
 
 const SPACE_IDX = BIOMES.findIndex((b) => b.id === "space");
@@ -65,6 +66,9 @@ export default function HelicopterGame() {
   const [comboCount, setComboCount] = useState(0);
   const [comboMultiplier, setComboMultiplier] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Audio preload / offline readiness
+  const [audioReady, setAudioReady] = useState(false);
+  const [audioLoaded, setAudioLoaded] = useState(0);
   const [settings, setSettingsState] = useState({
     sound: true,
     screenShake: true,
@@ -90,6 +94,24 @@ export default function HelicopterGame() {
       stopMusic();
       stopRotor();
     };
+  }, []);
+
+  // Register the music service worker (offline) and preload all tracks up
+  // front, driving the loading overlay. Best-effort: failures never block play.
+  useEffect(() => {
+    let cancelled = false;
+
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => { /* offline cache unavailable; ignore */ });
+    }
+
+    preloadMusic((loaded) => {
+      if (!cancelled) setAudioLoaded(loaded);
+    }).finally(() => {
+      if (!cancelled) setAudioReady(true);
+    });
+
+    return () => { cancelled = true; };
   }, []);
 
   const updateSetting = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
@@ -1266,6 +1288,27 @@ export default function HelicopterGame() {
           height={HEIGHT}
           className="w-full h-full rounded border-2 border-[var(--border)] cursor-pointer"
         />
+
+        {/* Audio preload / offline-cache overlay */}
+        {!audioReady && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/90 rounded p-6 text-center">
+            <h2 className="font-[family-name:var(--font-display)] text-base sm:text-lg text-[var(--accent)] mb-1">
+              HELICOPTER
+            </h2>
+            <p className="font-[family-name:var(--font-mono)] text-base text-[var(--muted)] mb-4 flicker">
+              CACHING SOUNDTRACK FOR OFFLINE PLAY…
+            </p>
+            <div className="w-56 max-w-[70%] h-3 bg-[var(--surface-2)] rounded-full overflow-hidden border border-[var(--border)]">
+              <div
+                className="h-full bg-[var(--crt-green)] transition-[width] duration-300 ease-out"
+                style={{ width: `${(audioLoaded / Math.max(1, getMusicTrackCount())) * 100}%` }}
+              />
+            </div>
+            <p className="mt-3 font-[family-name:var(--font-mono)] text-sm text-[var(--muted)]">
+              {audioLoaded} / {getMusicTrackCount()} tracks
+            </p>
+          </div>
+        )}
 
         {/* Biome banner */}
         {biomeBanner && (

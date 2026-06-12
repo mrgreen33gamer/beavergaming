@@ -44,8 +44,10 @@ export const MAGNET_RADIUS_SQ = MAGNET_RADIUS * MAGNET_RADIUS;
 export const MAGNET_DURATION_MS = 5000;
 export const SLOWMO_DURATION_MS = 4000;
 export const SLOWMO_FACTOR = 0.5;
-// Brief invulnerability after shield consumed
-export const SHIELD_GRACE_MS = 700;
+// Invulnerability after a shield is consumed. Kept close to the life-loss
+// window (INVULN_AFTER_HIT_MS) so popping a shield gives the same generous
+// ghost period as taking a hit — long enough to fly clear of the obstacle.
+export const SHIELD_GRACE_MS = 1800;
 
 // ===== Scoring =====
 export const BLUE_GEM_POINTS = 25;

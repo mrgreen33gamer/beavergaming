@@ -189,7 +189,7 @@ const MUSIC_TRACKS: Record<number, string> = {
 const MUSIC_TARGET_VOL = 0.32;
 const FADE_DURATION_MS = 1100;
 
-type Track = { el: HTMLAudioElement; url: string };
+type Track = { el: HTMLAudioElement; key: number; url: string };
 
 let activeTrack: Track | null = null;
 let fadingOut: Track[] = [];
@@ -197,6 +197,24 @@ let fadeRaf: number | null = null;
 let lastFadeTime = 0;
 let musicMuted = false;
 let pendingAutoplayRetry: (() => void) | null = null;
+
+// Preloaded blob object URLs keyed by biome index. Once populated, playback
+// needs no network — tracks loop from memory (works offline within a session,
+// and across reloads when paired with the service worker cache).
+const objectUrls = new Map<number, string>();
+let preloadStarted = false;
+
+export function getMusicTrackCount(): number {
+  return Object.keys(MUSIC_TRACKS).length;
+}
+
+// Resolve the best source for a biome: preloaded blob first, network path
+// otherwise (so music still works even if preload hasn't finished/ succeeded).
+function trackUrlFor(biomeIdx: number): string | null {
+  const blob = objectUrls.get(biomeIdx);
+  if (blob) return blob;
+  return MUSIC_TRACKS[biomeIdx] ?? null;
+}
 
 function approach(current: number, goal: number, step: number) {
   if (current < goal) return Math.min(goal, current + step);
@@ -281,10 +299,10 @@ function ensureFadeLoop() {
 // Switch background music to the track configured for the given biome index.
 // Pass -1 (or any unmapped index) to fade out and leave silent.
 export function setMusicForBiome(biomeIdx: number) {
-  const url = MUSIC_TRACKS[biomeIdx] ?? null;
+  const url = trackUrlFor(biomeIdx);
 
-  // Already on this track — nothing to do.
-  if (activeTrack && activeTrack.url === url) return;
+  // Already on this biome's track — nothing to do.
+  if (activeTrack && activeTrack.key === biomeIdx) return;
   if (!activeTrack && url === null) return;
 
   // Demote current active to fading-out.
@@ -302,14 +320,14 @@ export function setMusicForBiome(biomeIdx: number) {
       // Surface load errors (404 / decode failure) to the console exactly once.
       el.addEventListener("error", () => {
         // eslint-disable-next-line no-console
-        console.warn(`[helicopter music] could not load ${url} — check that the file exists in /public${url}`);
+        console.warn(`[helicopter music] could not load track for biome ${biomeIdx} (${MUSIC_TRACKS[biomeIdx]}) — check the file exists in /public/music/`);
       }, { once: true });
-      const t: Track = { el, url };
+      const t: Track = { el, key: biomeIdx, url };
       activeTrack = t;
       tryPlay(t);
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.warn(`[helicopter music] could not create audio for ${url}:`, err);
+      console.warn(`[helicopter music] could not create audio for biome ${biomeIdx}:`, err);
     }
   }
 
@@ -337,4 +355,42 @@ export function stopMusic() {
 export function setMusicMuted(m: boolean) {
   musicMuted = m;
   ensureFadeLoop();
+}
+
+// Fetch every track as a blob up-front so playback is instant, gapless, and
+// network-independent for the rest of the session. Reports progress for the
+// loading overlay. Safe to call repeatedly (no-ops after the first call) and
+// never rejects — a failed track simply falls back to its network path later.
+export async function preloadMusic(
+  onProgress?: (loaded: number, total: number) => void,
+  timeoutMs = 12000
+): Promise<void> {
+  if (preloadStarted) return;
+  preloadStarted = true;
+  if (typeof fetch === "undefined") return;
+
+  const entries = Object.entries(MUSIC_TRACKS);
+  const total = entries.length;
+  let loaded = 0;
+
+  const fetchOne = async ([idxStr, path]: [string, string]) => {
+    const idx = Number(idxStr);
+    try {
+      const res = await fetch(path, { cache: "force-cache" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      objectUrls.set(idx, URL.createObjectURL(blob));
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(`[helicopter music] preload failed for ${path} (will fall back to streaming):`, err);
+    } finally {
+      loaded++;
+      try { onProgress?.(loaded, total); } catch { /* ignore */ }
+    }
+  };
+
+  const all = Promise.all(entries.map(fetchOne)).then(() => undefined);
+  // Never let the loader hang — resolve after the timeout regardless.
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
+  await Promise.race([all, timeout]);
 }
