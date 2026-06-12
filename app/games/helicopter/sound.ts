@@ -196,10 +196,44 @@ let fadingOut: Track[] = [];
 let fadeRaf: number | null = null;
 let lastFadeTime = 0;
 let musicMuted = false;
+let pendingAutoplayRetry: (() => void) | null = null;
 
 function approach(current: number, goal: number, step: number) {
   if (current < goal) return Math.min(goal, current + step);
   return Math.max(goal, current - step);
+}
+
+// If a play() call gets rejected by the browser's autoplay policy, register
+// a one-shot global gesture listener that will resume playback on the very
+// next click/keydown anywhere on the page.
+function armAutoplayRetry(retry: () => void) {
+  pendingAutoplayRetry = retry;
+  if (typeof window === "undefined") return;
+  const handler = () => {
+    const fn = pendingAutoplayRetry;
+    pendingAutoplayRetry = null;
+    window.removeEventListener("pointerdown", handler);
+    window.removeEventListener("keydown", handler);
+    if (fn) fn();
+  };
+  window.addEventListener("pointerdown", handler, { once: true });
+  window.addEventListener("keydown", handler, { once: true });
+}
+
+function tryPlay(t: Track) {
+  const p = t.el.play();
+  if (p && typeof p.catch === "function") {
+    p.catch((err: unknown) => {
+      // Autoplay rejection — retry on the next user gesture.
+      if (err && (err as { name?: string }).name === "NotAllowedError") {
+        armAutoplayRetry(() => { if (activeTrack === t) tryPlay(t); });
+        return;
+      }
+      // Any other error (decode failure, 404, etc) — surface to console once.
+      // eslint-disable-next-line no-console
+      console.warn(`[helicopter music] failed to play ${t.url}:`, err);
+    });
+  }
 }
 
 function ensureFadeLoop() {
@@ -222,7 +256,11 @@ function ensureFadeLoop() {
         t.el.volume = approach(t.el.volume, 0, step);
         if (t.el.volume <= 0.001) {
           try { t.el.pause(); } catch { /* ignore */ }
-          t.el.src = "";
+          // Detach event handlers + release the file by removing the source
+          // element. Avoid setting src to "" — that triggers a request for
+          // the current page URL.
+          t.el.removeAttribute("src");
+          try { t.el.load(); } catch { /* ignore */ }
           return false;
         }
         return true;
@@ -260,11 +298,18 @@ export function setMusicForBiome(biomeIdx: number) {
       const el = new Audio(url);
       el.loop = true;
       el.volume = 0;
-      // play() can reject if no user gesture has occurred yet; harmless to ignore.
-      el.play().catch(() => { /* will retry implicitly when user gestures */ });
-      activeTrack = { el, url };
-    } catch {
-      // Audio not supported in this env — degrade silently.
+      el.preload = "auto";
+      // Surface load errors (404 / decode failure) to the console exactly once.
+      el.addEventListener("error", () => {
+        // eslint-disable-next-line no-console
+        console.warn(`[helicopter music] could not load ${url} — check that the file exists in /public${url}`);
+      }, { once: true });
+      const t: Track = { el, url };
+      activeTrack = t;
+      tryPlay(t);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(`[helicopter music] could not create audio for ${url}:`, err);
     }
   }
 
@@ -278,9 +323,7 @@ export function pauseMusic() {
 }
 
 export function resumeMusic() {
-  if (activeTrack) {
-    activeTrack.el.play().catch(() => { /* ignore */ });
-  }
+  if (activeTrack) tryPlay(activeTrack);
 }
 
 export function stopMusic() {
