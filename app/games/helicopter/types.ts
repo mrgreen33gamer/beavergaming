@@ -4,13 +4,14 @@ export type Vec = { x: number; y: number };
 
 export type Difficulty = "easy" | "hard";
 
-export type ObstacleType = "static" | "moving" | "narrow" | "sawblade";
+export type ObstacleType = "static" | "moving" | "narrow" | "sawblade" | "laser";
 
 export type PickupType =
   | "blue_gem"
   | "green_gem"
   | "red_gem"
   | "gold_gem"
+  | "coin"
   | "shield"
   | "slowmo"
   | "magnet";
@@ -68,6 +69,33 @@ export type Smoke = {
 };
 
 export type Mountain = { x: number; height: number };
+
+// ===== Space biome flyers =====
+export type Asteroid = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  angle: number;
+  spin: number;
+  shape: number[];   // per-vertex radius multipliers for a lumpy silhouette
+};
+
+export type Jet = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  fireAt: number;    // timestamp of next shot
+  enterFrame: number;
+};
+
+export type Bullet = {
+  x: number;
+  y: number;
+  vx: number;
+};
 
 export type RainDrop = { x: number; y: number; speed: number; length: number };
 

@@ -1,11 +1,12 @@
 import type {
   Biome, Obstacle, Pickup, RainDrop, Star, Mountain,
+  Asteroid, Jet, Bullet,
 } from "./types";
 import {
   WIDTH, HEIGHT, OBSTACLE_WIDTH, PICKUP_SIZE, HELI_W, HELI_H,
   TILT_FACTOR, TILT_MAX,
 } from "./constants";
-import { clamp } from "./helpers";
+import { clamp, laserState } from "./helpers";
 
 // ===== Background / sky =====
 export function drawBackground(ctx: CanvasRenderingContext2D, biome: Biome, frame = 0) {
@@ -189,6 +190,10 @@ export function drawObstacle(
     drawSawblade(ctx, o);
     return;
   }
+  if (o.type === "laser") {
+    drawLaserGate(ctx, o, biome);
+    return;
+  }
   const halfGap = o.gap / 2;
   // Body gradient
   const grad = ctx.createLinearGradient(o.x, 0, o.x + OBSTACLE_WIDTH, 0);
@@ -292,7 +297,77 @@ function drawSawblade(ctx: CanvasRenderingContext2D, o: Obstacle) {
   ctx.restore();
 }
 
-// ===== Pickups =====
+// Neon laser gate: standard pillars with emitter nodes on the caps and an
+// energy beam spanning the gap that pulses off → charging → on.
+function drawLaserGate(ctx: CanvasRenderingContext2D, o: Obstacle, biome: Biome) {
+  const halfGap = o.gap / 2;
+  const topEdge = o.gapY - halfGap;
+  const botEdge = o.gapY + halfGap;
+  const cx = o.x + OBSTACLE_WIDTH / 2;
+  const state = laserState(o.movePhase);
+
+  // Pillar bodies (neon-tinted)
+  const grad = ctx.createLinearGradient(o.x, 0, o.x + OBSTACLE_WIDTH, 0);
+  grad.addColorStop(0, biome.pillarMain[0]);
+  grad.addColorStop(0.5, biome.pillarMain[1]);
+  grad.addColorStop(1, biome.pillarMain[2]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(o.x, 0, OBSTACLE_WIDTH, topEdge);
+  ctx.fillRect(o.x, botEdge, OBSTACLE_WIDTH, HEIGHT - botEdge);
+
+  // Emitter housings on the inner faces
+  ctx.fillStyle = "#1a0830";
+  ctx.fillRect(o.x, topEdge - 10, OBSTACLE_WIDTH, 10);
+  ctx.fillRect(o.x, botEdge, OBSTACLE_WIDTH, 10);
+
+  // Emitter glow dots
+  const emitColor = state === "on" ? "#ff3060" : state === "charging" ? "#ffd060" : "#e060ff";
+  ctx.fillStyle = emitColor;
+  ctx.beginPath(); ctx.arc(cx, topEdge - 5, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, botEdge + 5, 5, 0, Math.PI * 2); ctx.fill();
+
+  // Beam
+  if (state === "charging") {
+    // Thin flickering pilot line telegraphing the imminent beam
+    ctx.save();
+    ctx.globalAlpha = 0.35 + Math.random() * 0.25;
+    ctx.strokeStyle = "#ffd060";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx, topEdge);
+    ctx.lineTo(cx, botEdge);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  } else if (state === "on") {
+    ctx.save();
+    // Outer bloom
+    const beamGrad = ctx.createLinearGradient(o.x, 0, o.x + OBSTACLE_WIDTH, 0);
+    beamGrad.addColorStop(0, "rgba(255,48,96,0)");
+    beamGrad.addColorStop(0.5, "rgba(255,80,120,0.5)");
+    beamGrad.addColorStop(1, "rgba(255,48,96,0)");
+    ctx.fillStyle = beamGrad;
+    ctx.fillRect(o.x, topEdge, OBSTACLE_WIDTH, botEdge - topEdge);
+    // Hot core
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 4;
+    ctx.shadowColor = "#ff3060";
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(cx, topEdge);
+    ctx.lineTo(cx, botEdge);
+    ctx.stroke();
+    ctx.strokeStyle = "#ff6080";
+    ctx.lineWidth = 8;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, topEdge);
+    ctx.lineTo(cx, botEdge);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
 export function drawPickup(
   ctx: CanvasRenderingContext2D,
   p: Pickup,
@@ -306,9 +381,54 @@ export function drawPickup(
   else if (p.type === "green_gem") drawGreenGem(ctx, x, y, p.spin, frame);
   else if (p.type === "red_gem") drawRedGem(ctx, x, y, p.spin, frame);
   else if (p.type === "gold_gem") drawGoldGem(ctx, x, y, p.spin, frame);
+  else if (p.type === "coin") drawCoin(ctx, x, y, p.spin, frame);
   else if (p.type === "shield") drawShieldPickup(ctx, x, y, frame);
   else if (p.type === "slowmo") drawSlowmoPickup(ctx, x, y, frame);
   else if (p.type === "magnet") drawMagnetPickup(ctx, x, y, frame);
+}
+
+// Spinning gold coin — the 3D-flip illusion comes from squashing width by
+// |cos(spin)|. Used for the 3x3 coin patches.
+function drawCoin(
+  ctx: CanvasRenderingContext2D, x: number, y: number, spin: number, frame: number
+) {
+  const R = PICKUP_SIZE * 0.78;
+  const flip = Math.cos(spin);
+  const w = Math.max(2, Math.abs(flip) * R);
+
+  // Soft glow
+  const glow = ctx.createRadialGradient(x, y, 1, x, y, R + 5);
+  glow.addColorStop(0, "rgba(255,210,80,0.55)");
+  glow.addColorStop(1, "rgba(255,210,80,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(x - R - 5, y - R - 5, (R + 5) * 2, (R + 5) * 2);
+
+  // Edge (visible when the coin turns side-on) — darker gold
+  ctx.fillStyle = "#a06820";
+  ctx.beginPath();
+  ctx.ellipse(x, y, w + 1.5, R, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Face
+  ctx.fillStyle = flip >= 0 ? "#ffd060" : "#f0b840";
+  ctx.beginPath();
+  ctx.ellipse(x, y, w, R, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Inner ring + star, only legible when the face is open enough
+  if (w > R * 0.4) {
+    ctx.strokeStyle = "#fff5d0";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(x, y, w * 0.62, R * 0.62, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // little star glint
+    const tw = Math.sin(frame * 0.2 + x) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + tw * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(x - w * 0.2, y - R * 0.2, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawGem(
@@ -768,5 +888,144 @@ export function drawExplosion(
   }
 
   ctx.globalAlpha = 1;
+  ctx.restore();
+}
+// ===== Space biome flyers =====
+
+export function drawAsteroid(ctx: CanvasRenderingContext2D, a: Asteroid) {
+  ctx.save();
+  ctx.translate(a.x, a.y);
+  ctx.rotate(a.angle);
+
+  // Body — lumpy polygon from the per-vertex shape multipliers
+  const n = a.shape.length;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const ang = (i / n) * Math.PI * 2;
+    const rr = a.r * a.shape[i];
+    const px = Math.cos(ang) * rr;
+    const py = Math.sin(ang) * rr;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  const g = ctx.createLinearGradient(-a.r, -a.r, a.r, a.r);
+  g.addColorStop(0, "#8a7a6a");
+  g.addColorStop(1, "#4a3e36");
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = "#352a24";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Craters
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.beginPath(); ctx.arc(-a.r * 0.25, -a.r * 0.15, a.r * 0.22, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(a.r * 0.3, a.r * 0.1, a.r * 0.16, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(a.r * 0.05, -a.r * 0.4, a.r * 0.12, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+export function drawJet(ctx: CanvasRenderingContext2D, j: Jet, frame: number) {
+  ctx.save();
+  ctx.translate(j.x, j.y);
+
+  // Engine flame trailing to the right (jet flies left)
+  const flick = 0.6 + Math.random() * 0.4;
+  const fg = ctx.createLinearGradient(10, 0, 30, 0);
+  fg.addColorStop(0, `rgba(255,200,80,${flick})`);
+  fg.addColorStop(1, "rgba(255,80,40,0)");
+  ctx.fillStyle = fg;
+  ctx.beginPath();
+  ctx.moveTo(10, -4);
+  ctx.lineTo(26 + flick * 8, 0);
+  ctx.lineTo(10, 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // Fuselage — nose points left
+  ctx.fillStyle = "#c0c8d4";
+  ctx.beginPath();
+  ctx.moveTo(-18, 0);
+  ctx.lineTo(8, -5);
+  ctx.lineTo(14, 0);
+  ctx.lineTo(8, 5);
+  ctx.closePath();
+  ctx.fill();
+  // Wings
+  ctx.fillStyle = "#8a93a0";
+  ctx.beginPath();
+  ctx.moveTo(2, -3);
+  ctx.lineTo(10, -14);
+  ctx.lineTo(6, -3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(2, 3);
+  ctx.lineTo(10, 14);
+  ctx.lineTo(6, 3);
+  ctx.closePath();
+  ctx.fill();
+  // Cockpit
+  ctx.fillStyle = "#5fc8e0";
+  ctx.beginPath();
+  ctx.ellipse(-6, 0, 4, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Nose blinker
+  const blink = Math.sin(frame * 0.3) * 0.5 + 0.5;
+  ctx.fillStyle = `rgba(255,80,80,${0.4 + blink * 0.6})`;
+  ctx.beginPath();
+  ctx.arc(-18, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+export function drawBullet(ctx: CanvasRenderingContext2D, b: Bullet) {
+  ctx.save();
+  // Tracer tail
+  const g = ctx.createLinearGradient(b.x, 0, b.x + 18, 0);
+  g.addColorStop(0, "rgba(255,90,90,0.9)");
+  g.addColorStop(1, "rgba(255,90,90,0)");
+  ctx.strokeStyle = g;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(b.x, b.y);
+  ctx.lineTo(b.x + 16, b.y);
+  ctx.stroke();
+  // Hot head
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ff5a5a";
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+  ctx.globalAlpha = 0.5;
+  ctx.fill();
+  ctx.restore();
+}
+
+// Subtle warp-streak accent layered over the space starfield.
+export function drawSpaceWarp(ctx: CanvasRenderingContext2D, frame: number) {
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  for (let i = 0; i < 14; i++) {
+    const seed = i * 137.5;
+    const y = (seed % HEIGHT);
+    const speed = 2 + (i % 5);
+    const x = WIDTH - ((frame * speed + seed * 3) % (WIDTH + 120));
+    const len = 20 + (i % 4) * 18;
+    const g = ctx.createLinearGradient(x, y, x + len, y);
+    g.addColorStop(0, "rgba(180,200,255,0)");
+    g.addColorStop(1, "rgba(200,215,255,0.5)");
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + len, y);
+    ctx.stroke();
+  }
   ctx.restore();
 }

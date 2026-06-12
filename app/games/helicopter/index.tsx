@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   Obstacle, Pickup, Particle, Spark, Smoke, Mountain, RainDrop, Star,
-  FloatingText, BiomeId, Difficulty,
+  FloatingText, BiomeId, Difficulty, Asteroid, Jet, Bullet,
 } from "./types";
 import {
   WIDTH, HEIGHT, HELI_X, HELI_W, HELI_H,
@@ -19,16 +19,21 @@ import {
   COMBO_TIMEOUT_MS,
   EASY_LIVES, EASY_GAP_BONUS, INVULN_AFTER_HIT_MS,
   HIGHSCORE_KEY,
+  COIN_POINTS, COIN_PATCH_CHANCE, COIN_PATCH_SPACING, COIN_PATCH_OFFSET,
+  SPACE_CLEAR_MS, SPACE_GAP_MIN, SPACE_GAP_MAX,
+  ASTEROID_MIN_MS, ASTEROID_MAX_MS, JET_MIN_MS, JET_MAX_MS,
 } from "./constants";
 import { BIOMES, getBiomeIndex, pickObstacleType } from "./biomes";
 import {
   addBurst, makeObstacle, makePickup, rollPickup,
   getId, resetIdCounter, getComboMultiplier,
+  laserState, makeAsteroid, makeJet, makeBullet,
 } from "./helpers";
 import {
   drawBackground, drawStars, drawSun, drawRain, drawLightningFlash,
   drawMountains, drawObstacle, drawPickup, drawHeli, drawMagnetAura,
   drawSlowmoOverlay, drawSmoke, drawSparks, drawExplosion,
+  drawAsteroid, drawJet, drawBullet, drawSpaceWarp,
 } from "./drawing";
 import {
   initAudio, setMuted as setAudioMuted,
@@ -38,6 +43,8 @@ import {
   startRotor, stopRotor,
   setMusicForBiome, pauseMusic, resumeMusic, stopMusic,
 } from "./sound";
+
+const SPACE_IDX = BIOMES.findIndex((b) => b.id === "space");
 
 export default function HelicopterGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -113,6 +120,14 @@ export default function HelicopterGame() {
     farMountains: [] as Mountain[],
     nearMountains: [] as Mountain[],
     floatingTexts: [] as FloatingText[],
+    // Space biome flyers
+    asteroids: [] as Asteroid[],
+    jets: [] as Jet[],
+    bullets: [] as Bullet[],
+    spaceClearUntil: 0,   // while now < this, no pillars spawn (open void)
+    spaceEntered: false,  // guards one-time space intro
+    nextAsteroidAt: 0,
+    nextJetAt: 0,
     // Game state
     distance: 0,
     speed: SCROLL_SPEED,
@@ -208,6 +223,13 @@ export default function HelicopterGame() {
       farMountains: far,
       nearMountains: near,
       floatingTexts: [],
+      asteroids: [],
+      jets: [],
+      bullets: [],
+      spaceClearUntil: 0,
+      spaceEntered: false,
+      nextAsteroidAt: 0,
+      nextJetAt: 0,
       distance: 0,
       speed: SCROLL_SPEED,
       running: true,
@@ -259,6 +281,90 @@ export default function HelicopterGame() {
   const showBanner = (text: string, ms = 1800) => {
     setBiomeBanner(text);
     setTimeout(() => setBiomeBanner(null), ms);
+  };
+
+  // After a shield pop or a life loss, the heli is often still geometrically
+  // inside the pillar/floor that triggered it. If we leave it there, the grace
+  // period expires while still overlapping and the player takes an unfair
+  // second hit. This nudges the heli into clear air (into the current gap,
+  // off the floor/ceiling) and gives a small upward bounce so it recovers.
+  const escapeToSafety = (s: typeof stateRef.current) => {
+    for (const o of s.obstacles) {
+      if (o.type === "sawblade" || o.type === "laser") continue;
+      const xOverlap =
+        HELI_X + HELI_W / 2 > o.x && HELI_X - HELI_W / 2 < o.x + OBSTACLE_WIDTH;
+      if (!xOverlap) continue;
+      const half = o.gap / 2;
+      const topInner = o.gapY - half + HELI_H / 2 + 3;
+      const botInner = o.gapY + half - HELI_H / 2 - 3;
+      if (topInner <= botInner) {
+        s.y = Math.max(topInner, Math.min(botInner, s.y));
+      } else {
+        s.y = o.gapY; // gap smaller than heli (shouldn't happen) — centre it
+      }
+      break;
+    }
+    const margin = HELI_H / 2 + 4;
+    s.y = Math.max(margin, Math.min(HEIGHT - margin, s.y));
+    s.vy = -2.5; // gentle lift so the player isn't immediately dragged back down
+  };
+
+  // Drop a 3x3 grid of spinning coins centred on a gap corridor.
+  const spawnCoinPatch = (s: typeof stateRef.current, centerX: number, gapY: number) => {
+    const sp = COIN_PATCH_SPACING;
+    const cy = Math.max(60, Math.min(HEIGHT - 60, gapY));
+    for (let row = -1; row <= 1; row++) {
+      for (let col = 0; col < 3; col++) {
+        const py = cy + row * sp;
+        if (py < 28 || py > HEIGHT - 28) continue;
+        s.pickups.push(makePickup("coin", centerX + col * sp, py));
+      }
+    }
+  };
+
+  // Spawn / move / despawn the deep-space flyers (asteroids, jets, bullets).
+  const updateSpaceFlyers = (s: typeof stateRef.current, now: number) => {
+    if (now >= s.nextAsteroidAt && s.asteroids.length < 5) {
+      s.asteroids.push(makeAsteroid());
+      s.nextAsteroidAt = now + ASTEROID_MIN_MS + Math.random() * (ASTEROID_MAX_MS - ASTEROID_MIN_MS);
+    }
+    if (now >= s.nextJetAt && s.jets.length < 2) {
+      s.jets.push(makeJet(now));
+      s.nextJetAt = now + JET_MIN_MS + Math.random() * (JET_MAX_MS - JET_MIN_MS);
+    }
+
+    // Asteroids
+    let aw = 0;
+    for (let i = 0; i < s.asteroids.length; i++) {
+      const a = s.asteroids[i];
+      a.x += a.vx; a.y += a.vy; a.angle += a.spin;
+      if (a.y < a.r || a.y > HEIGHT - a.r) a.vy *= -1;
+      if (a.x > -a.r * 2 - 10) { if (aw !== i) s.asteroids[aw] = a; aw++; }
+    }
+    s.asteroids.length = aw;
+
+    // Jets (fire forward while on screen)
+    let jw = 0;
+    for (let i = 0; i < s.jets.length; i++) {
+      const j = s.jets[i];
+      j.x += j.vx; j.y += j.vy;
+      if (j.y < 40 || j.y > HEIGHT - 40) j.vy *= -1;
+      if (now >= j.fireAt && j.x > 40 && j.x < WIDTH + 20) {
+        s.bullets.push(makeBullet(j.x - 18, j.y));
+        j.fireAt = now + 750 + Math.random() * 500;
+      }
+      if (j.x > -50) { if (jw !== i) s.jets[jw] = j; jw++; }
+    }
+    s.jets.length = jw;
+
+    // Bullets
+    let bw = 0;
+    for (let i = 0; i < s.bullets.length; i++) {
+      const b = s.bullets[i];
+      b.x += b.vx;
+      if (b.x > -20) { if (bw !== i) s.bullets[bw] = b; bw++; }
+    }
+    s.bullets.length = bw;
   };
 
   // ===== Main game loop =====
@@ -315,6 +421,19 @@ export default function HelicopterGame() {
           showBanner(BIOMES[newBiomeIdx].name, 1800);
           playBiomeTransition();
           setMusicForBiome(newBiomeIdx);
+
+          // Entering deep space: clear all pillars for an open void, then
+          // columns return later with wide "room" spacing alongside flyers.
+          if (newBiomeIdx === SPACE_IDX && !s.spaceEntered) {
+            s.spaceEntered = true;
+            s.spaceClearUntil = now + SPACE_CLEAR_MS;
+            s.obstacles.length = 0;
+            // Drop any gems still sitting in the old pillar corridors
+            s.pickups.length = 0;
+            // Start flyers almost immediately so the void isn't empty
+            s.nextAsteroidAt = now + 600;
+            s.nextJetAt = now + 2600;
+          }
         }
 
         // ---- Scroll obstacles ----
@@ -345,33 +464,80 @@ export default function HelicopterGame() {
               playSawBuzz();
             }
           }
+          if (o.type === "laser") {
+            // Advance the on/off cycle (frames). Buzz briefly as the beam fires.
+            const prev = laserState(o.movePhase);
+            o.movePhase += timeScale;
+            const nowState = laserState(o.movePhase);
+            if (prev !== "on" && nowState === "on" &&
+                Math.abs(o.x + OBSTACLE_WIDTH / 2 - HELI_X) < 220) {
+              playSawBuzz();
+            }
+          }
         }
+        // ---- Recycle off-screen pillars (all biomes) ----
         if (s.obstacles[0] && s.obstacles[0].x + OBSTACLE_WIDTH < 0) {
           s.obstacles.shift();
-          const lastX = s.obstacles[s.obstacles.length - 1].x;
-          const nextX = lastX + OBSTACLE_SPACING;
-          const type = pickObstacleType(currentBiome.id);
-          // Clamp gapY so consecutive pillars don't require impossible vertical swings
-          const prevGapY = s.obstacles[s.obstacles.length - 1].gapY;
-          const maxDelta = 110;
-          const minGapY = Math.max(90, prevGapY - maxDelta);
-          const maxGapY = Math.min(HEIGHT - 90, prevGapY + maxDelta);
-          const gapY = minGapY + Math.random() * (maxGapY - minGapY);
-          s.obstacles.push(makeObstacle(type, nextX, gapY, s.gapBonus));
+          // Space uses its own room spawner below; other biomes chain here.
+          if (currentBiome.id !== "space" && s.obstacles.length > 0) {
+            const lastX = s.obstacles[s.obstacles.length - 1].x;
+            const nextX = lastX + OBSTACLE_SPACING;
+            const type = pickObstacleType(currentBiome.id);
+            // Clamp gapY so consecutive pillars don't require impossible swings
+            const prevGapY = s.obstacles[s.obstacles.length - 1].gapY;
+            const maxDelta = 110;
+            const minGapY = Math.max(90, prevGapY - maxDelta);
+            const maxGapY = Math.min(HEIGHT - 90, prevGapY + maxDelta);
+            const gapY = minGapY + Math.random() * (maxGapY - minGapY);
+            s.obstacles.push(makeObstacle(type, nextX, gapY, s.gapBonus));
 
-          const pickupType = rollPickup();
-          if (pickupType) {
-            // Place gems within the gap corridor so they're always reachable
-            let py: number;
-            if (Math.random() < 0.25) {
-              const edgeOffset = (Math.random() < 0.5 ? -1 : 1) * 30;
-              py = gapY + edgeOffset;
-            } else {
-              py = gapY + (Math.random() - 0.5) * 30;
+            const pickupType = rollPickup();
+            if (pickupType) {
+              let py: number;
+              if (Math.random() < 0.25) {
+                const edgeOffset = (Math.random() < 0.5 ? -1 : 1) * 30;
+                py = gapY + edgeOffset;
+              } else {
+                py = gapY + (Math.random() - 0.5) * 30;
+              }
+              py = Math.max(60, Math.min(HEIGHT - 60, py));
+              s.pickups.push(makePickup(pickupType, nextX + PICKUP_OFFSET_FROM_PILLAR, py));
+            } else if (type === "static" && Math.random() < COIN_PATCH_CHANCE) {
+              // 3x3 spinning-coin patch tucked in the corridor past a still pillar
+              spawnCoinPatch(s, nextX + COIN_PATCH_OFFSET, gapY);
             }
-            py = Math.max(60, Math.min(HEIGHT - 60, py));
-            s.pickups.push(makePickup(pickupType, nextX + PICKUP_OFFSET_FROM_PILLAR, py));
           }
+        }
+
+        // ---- Space: open-room pillar spawner (after the clearing void) ----
+        if (currentBiome.id === "space" && now >= s.spaceClearUntil) {
+          const last = s.obstacles[s.obstacles.length - 1];
+          const roomGap = SPACE_GAP_MIN + Math.random() * (SPACE_GAP_MAX - SPACE_GAP_MIN);
+          if (!last || last.x < WIDTH - roomGap) {
+            const spawnX = last ? last.x + roomGap : WIDTH + 120;
+            const type = pickObstacleType("space");
+            const prevGapY = last ? last.gapY : HEIGHT / 2;
+            const maxDelta = 130;
+            const minGapY = Math.max(90, prevGapY - maxDelta);
+            const maxGapY = Math.min(HEIGHT - 90, prevGapY + maxDelta);
+            const gapY = minGapY + Math.random() * (maxGapY - minGapY);
+            // Roomier gaps in space
+            const o = makeObstacle(type, spawnX, gapY, s.gapBonus + 24);
+            s.obstacles.push(o);
+
+            const pickupType = rollPickup();
+            if (pickupType) {
+              const py = Math.max(60, Math.min(HEIGHT - 60, gapY + (Math.random() - 0.5) * 40));
+              s.pickups.push(makePickup(pickupType, spawnX + PICKUP_OFFSET_FROM_PILLAR, py));
+            } else if (Math.random() < COIN_PATCH_CHANCE * 0.8) {
+              spawnCoinPatch(s, spawnX + COIN_PATCH_OFFSET, gapY);
+            }
+          }
+        }
+
+        // ---- Space flyers: spawn, move, despawn ----
+        if (currentBiome.id === "space") {
+          updateSpaceFlyers(s, now);
         }
 
         // ---- Scroll pickups (and magnet-pull) ----
@@ -524,6 +690,15 @@ export default function HelicopterGame() {
               }
               continue;
             }
+            if (o.type === "laser") {
+              // Pillars still collide via the generic logic below, but when the
+              // beam is live the whole corridor is deadly.
+              const lx = HELI_X + HELI_W / 2 > o.x && HELI_X - HELI_W / 2 < o.x + OBSTACLE_WIDTH;
+              if (lx && laserState(o.movePhase) === "on") {
+                crashed = true;
+                break;
+              }
+            }
             const xOverlap = HELI_X + HELI_W / 2 > o.x && HELI_X - HELI_W / 2 < o.x + OBSTACLE_WIDTH;
             if (!xOverlap) continue;
             const half = o.gap / 2;
@@ -569,6 +744,28 @@ export default function HelicopterGame() {
           }
         }
 
+        // ---- Space flyer collisions ----
+        if (!crashed && currentBiome.id === "space") {
+          const heliR = 13;
+          for (const a of s.asteroids) {
+            const dx = HELI_X - a.x, dy = s.y - a.y;
+            const rr = a.r + heliR - 3;
+            if (dx * dx + dy * dy < rr * rr) { crashed = true; break; }
+          }
+          if (!crashed) {
+            for (const j of s.jets) {
+              if (Math.abs(j.x - HELI_X) < 16 + HELI_W / 2 - 6 &&
+                  Math.abs(j.y - s.y) < 10 + HELI_H / 2) { crashed = true; break; }
+            }
+          }
+          if (!crashed) {
+            for (const b of s.bullets) {
+              const dx = HELI_X - b.x, dy = s.y - b.y;
+              if (dx * dx + dy * dy < 13 * 13) { crashed = true; break; }
+            }
+          }
+        }
+
         // Shield or invuln check
         if (crashed && now < s.invulnUntil) {
           crashed = false;
@@ -577,6 +774,7 @@ export default function HelicopterGame() {
           s.shieldActive = false;
           setActiveShield(false);
           s.invulnUntil = now + SHIELD_GRACE_MS;
+          escapeToSafety(s);
           addBurst(s.particles, 28, (i) => {
             const a = Math.random() * Math.PI * 2;
             const sp = 1 + Math.random() * 4;
@@ -601,7 +799,7 @@ export default function HelicopterGame() {
             // Lost a life but not dead — brief invulnerability
             s.invulnUntil = now + INVULN_AFTER_HIT_MS;
             s.shake = 18;
-            s.vy = -2; // bounce up
+            escapeToSafety(s); // move clear of geometry so grace doesn't re-hit
             addBurst(s.particles, 20, (i) => {
               const a = Math.random() * Math.PI * 2;
               const sp = 1 + Math.random() * 4;
@@ -706,11 +904,18 @@ export default function HelicopterGame() {
       drawBackground(ctx, currentBiome, frame);
       drawSun(ctx, currentBiome);
       drawStars(ctx, s.stars, currentBiome, frame);
+      if (currentBiome.id === "space") drawSpaceWarp(ctx, frame);
       drawMountains(ctx, s.farMountains, s.nearMountains, currentBiome);
       drawRain(ctx, s.rain);
 
       for (const o of s.obstacles) drawObstacle(ctx, o, currentBiome);
       for (const p of s.pickups) drawPickup(ctx, p, frame);
+      // Space flyers render above pillars/pickups so hazards read clearly
+      if (currentBiome.id === "space") {
+        for (const a of s.asteroids) drawAsteroid(ctx, a);
+        for (const j of s.jets) drawJet(ctx, j, frame);
+        for (const b of s.bullets) drawBullet(ctx, b);
+      }
       drawSmoke(ctx, s.smoke);
 
       if (magnetActive) drawMagnetAura(ctx, HELI_X, s.y, frame);
@@ -793,7 +998,7 @@ export default function HelicopterGame() {
 
   // Pickup collection
   const collectPickup = (s: typeof stateRef.current, p: Pickup, now: number) => {
-    const isGem = p.type === "blue_gem" || p.type === "green_gem" || p.type === "red_gem" || p.type === "gold_gem";
+    const isGem = p.type === "blue_gem" || p.type === "green_gem" || p.type === "red_gem" || p.type === "gold_gem" || p.type === "coin";
 
     if (isGem) {
       // Combo tracking
@@ -898,6 +1103,21 @@ export default function HelicopterGame() {
       setGemsCollected(s.gemsCollected);
       setGemPoints(s.gemPoints);
       playGoldGem();
+    } else if (p.type === "coin") {
+      const pts = COIN_POINTS * s.comboMultiplier;
+      s.gemPoints += pts;
+      s.gemsCollected += 1;
+      // No floating text — a full patch would spam the screen; burst + blip is enough.
+      addBurst(s.particles, 5, () => {
+        const a = Math.random() * Math.PI * 2;
+        return {
+          x: p.x, y: p.y, vx: Math.cos(a) * 1.6, vy: Math.sin(a) * 1.6,
+          life: 16, maxLife: 16, color: "#ffd060", size: 2, gravity: 0,
+        };
+      });
+      setGemsCollected(s.gemsCollected);
+      setGemPoints(s.gemPoints);
+      playGemCollect();
     } else if (p.type === "shield") {
       s.shieldActive = true;
       setActiveShield(true);

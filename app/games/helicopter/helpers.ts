@@ -1,9 +1,11 @@
 import type {
   Vec, Obstacle, Pickup, PickupType, Particle, ObstacleType,
+  Asteroid, Jet, Bullet,
 } from "./types";
 import {
-  OBSTACLE_GAP_DEFAULT, OBSTACLE_GAP_NARROW, OBSTACLE_WIDTH, HEIGHT, MAX_PARTICLES,
+  OBSTACLE_GAP_DEFAULT, OBSTACLE_GAP_NARROW, HEIGHT, MAX_PARTICLES,
   BLUE_GEM_CHANCE, GREEN_GEM_CHANCE, RED_GEM_CHANCE, GOLD_GEM_CHANCE, POWERUP_CHANCE,
+  LASER_CYCLE, WIDTH, JET_BULLET_SPEED,
 } from "./constants";
 
 let nextId = 1;
@@ -48,7 +50,9 @@ export function makeObstacle(type: ObstacleType, x: number, gapY: number, gapBon
     x,
     gapY,
     baseGapY: type === "sawblade" ? sawY : gapY,
-    movePhase: Math.random() * Math.PI * 2,
+    // Lasers clock their on/off cycle in frames, so spread the starting phase
+    // across the whole cycle; everything else uses a radian phase.
+    movePhase: type === "laser" ? Math.random() * LASER_CYCLE : Math.random() * Math.PI * 2,
     type,
     gap,
     sawAngle: Math.random() * Math.PI * 2,
@@ -92,6 +96,49 @@ export function makePickup(type: PickupType, x: number, y: number): Pickup {
 
 export function clamp(v: number, lo: number, hi: number) {
   return v < lo ? lo : v > hi ? hi : v;
+}
+
+// Laser gate phase → visual/collision state. Off most of the cycle, with a
+// short telegraphed charge before the deadly window.
+export function laserState(movePhase: number): "off" | "charging" | "on" {
+  const c = (((movePhase % LASER_CYCLE) + LASER_CYCLE) % LASER_CYCLE) / LASER_CYCLE;
+  if (c < 0.55) return "off";
+  if (c < 0.68) return "charging";
+  if (c < 0.92) return "on";
+  return "off";
+}
+
+// ===== Space flyer factories =====
+export function makeAsteroid(): Asteroid {
+  const r = 14 + Math.random() * 16;
+  const verts = 9 + Math.floor(Math.random() * 3);
+  const shape: number[] = [];
+  for (let i = 0; i < verts; i++) shape.push(0.7 + Math.random() * 0.5);
+  return {
+    x: WIDTH + r + 10,
+    y: 50 + Math.random() * (HEIGHT - 100),
+    vx: -(1.4 + Math.random() * 1.6),
+    vy: (Math.random() - 0.5) * 0.8,
+    r,
+    angle: Math.random() * Math.PI * 2,
+    spin: (Math.random() - 0.5) * 0.05,
+    shape,
+  };
+}
+
+export function makeJet(now: number): Jet {
+  return {
+    x: WIDTH + 40,
+    y: 60 + Math.random() * (HEIGHT - 120),
+    vx: -(3.2 + Math.random() * 1.4),
+    vy: (Math.random() - 0.5) * 0.6,
+    fireAt: now + 350 + Math.random() * 400,
+    enterFrame: 0,
+  };
+}
+
+export function makeBullet(x: number, y: number): Bullet {
+  return { x, y, vx: -JET_BULLET_SPEED };
 }
 
 // Get combo multiplier from number of consecutive gems collected.

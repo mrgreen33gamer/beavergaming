@@ -52,6 +52,29 @@ export const BLUE_GEM_POINTS = 25;
 export const GREEN_GEM_POINTS = 50;
 export const RED_GEM_POINTS = 75;
 export const GOLD_GEM_POINTS = 100;
+export const COIN_POINTS = 10;
+
+// ===== Coin patches (3x3 grids between static pillars) =====
+export const COIN_PATCH_CHANCE = 0.45;   // rolled only when corridor is static
+export const COIN_PATCH_SPACING = 30;    // px between coins in the grid
+export const COIN_PATCH_OFFSET = 150;    // x past the pillar where the grid sits
+
+// ===== Laser gate (Neon biome) =====
+// Cycle measured in frames. Beam is off most of the time with a brief
+// telegraphed charge, so a well-timed pilot always has a window.
+export const LASER_CYCLE = 96;
+
+// ===== Space biome =====
+// On entering space, all pillars clear for this long (open void), then
+// columns return with wider "room" spacing alongside drifting hazards.
+export const SPACE_CLEAR_MS = 8000;
+export const SPACE_GAP_MIN = 320;        // wider than OBSTACLE_SPACING → roomy
+export const SPACE_GAP_MAX = 500;
+export const ASTEROID_MIN_MS = 1300;     // gap between asteroid spawns
+export const ASTEROID_MAX_MS = 2300;
+export const JET_MIN_MS = 3800;          // gap between jet spawns
+export const JET_MAX_MS = 6200;
+export const JET_BULLET_SPEED = 7.5;
 
 // ===== Perf safety =====
 export const MAX_PARTICLES = 200;

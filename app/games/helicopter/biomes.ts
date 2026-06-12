@@ -142,8 +142,8 @@ export const OBSTACLE_WEIGHTS: Record<
   underwater: [{ type: "static", weight: 0.60 }, { type: "moving", weight: 0.25 }, { type: "narrow", weight: 0.15 }],
   storm:      [{ type: "static", weight: 0.45 }, { type: "moving", weight: 0.30 }, { type: "narrow", weight: 0.25 }],
   volcanic:   [{ type: "static", weight: 0.30 }, { type: "moving", weight: 0.25 }, { type: "narrow", weight: 0.25 }, { type: "sawblade", weight: 0.20 }],
-  neon:       [{ type: "static", weight: 0.20 }, { type: "moving", weight: 0.25 }, { type: "narrow", weight: 0.25 }, { type: "sawblade", weight: 0.30 }],
-  space:      [{ type: "static", weight: 0.15 }, { type: "moving", weight: 0.25 }, { type: "narrow", weight: 0.25 }, { type: "sawblade", weight: 0.35 }],
+  neon:       [{ type: "static", weight: 0.22 }, { type: "moving", weight: 0.26 }, { type: "narrow", weight: 0.22 }, { type: "laser", weight: 0.30 }],
+  space:      [{ type: "static", weight: 0.45 }, { type: "moving", weight: 0.30 }, { type: "narrow", weight: 0.25 }],
 };
 
 export function getBiome(score: number): Biome {
