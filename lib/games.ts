@@ -10,6 +10,7 @@ export type Game = {
   emoji: string;
   accent: string; // hex color for the tile
   featured?: boolean;
+  cardImage?: string; // path under /game-cards/ e.g. "helicopter.jpg"
 };
 
 export const games: Game[] = [
@@ -28,13 +29,13 @@ export const games: Game[] = [
   {
     slug: "tank-shooter",
     title: "Base Command",
-    blurb: "Build defenses. Spawn an army. Hold the line.",
+    blurb: "10 buildings · 8 unit classes · boss waves · abilities",
     description:
-      "You're the commander, not the trigger-puller. Build barracks, tank factories, and aircraft hangars around your HQ. Each building auto-spawns its unit during waves. Enemies pour in from the edges and push for your base. Click a slot to build, earn currency from kills, and click START WAVE when you're ready for the next assault.",
+      "Full tactical command. Build 10 structure types across 10 slots — barracks, sniper nests, tank factories, mech bays, hangars, drone hives, artillery posts, flame bunkers, radar towers, and repair depots. Each spawns smart AI units that auto-target enemies by threat priority. Upgrade buildings to Lv3 for stronger squads. Face 8 enemy types including stealth infiltrators, bombers, healers, and massive bosses every 5 waves. Deploy commander abilities: Airstrike, Reinforce, and Shield. Chain kills for combo multipliers. Day/night cycle shifts the battlefield. Fullscreen and touch-friendly.",
     category: "action",
-    controls: "Click slots to build &middot; START WAVE to begin",
+    controls: "Tap slots to build &middot; Upgrade or sell buildings &middot; Use abilities &middot; START WAVE to begin",
     emoji: "🪖",
-    accent: "#5a8c5e",
+    accent: "#7fd650",
   },
   {
     slug: "helicopter",
@@ -46,6 +47,7 @@ export const games: Game[] = [
     controls: "Hold SPACE or click",
     emoji: "🚁",
     accent: "#ff6b1a",
+    cardImage: "helicopter.jpg",
   },
   {
     slug: "apple-shooter",
