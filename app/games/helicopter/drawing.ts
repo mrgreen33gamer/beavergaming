@@ -6,7 +6,7 @@ import {
   WIDTH, HEIGHT, OBSTACLE_WIDTH, PICKUP_SIZE, HELI_W, HELI_H,
   TILT_FACTOR, TILT_MAX,
 } from "./constants";
-import { clamp, laserState } from "./helpers";
+import { clamp, laserState, LASER_BEAM_REACH } from "./helpers";
 
 // ===== Background / sky =====
 export function drawBackground(ctx: CanvasRenderingContext2D, biome: Biome, frame = 0) {
@@ -297,8 +297,10 @@ function drawSawblade(ctx: CanvasRenderingContext2D, o: Obstacle) {
   ctx.restore();
 }
 
-// Neon laser gate: standard pillars with emitter nodes on the caps and an
-// energy beam spanning the gap that pulses off → charging → on.
+// Neon laser gate: pillars with emitter nodes on both inner caps. The cycle
+// alternates between OFF, CHARGE_TOP → TOP_ON (only the top half is deadly)
+// and CHARGE_BOT → BOT_ON (only the bottom half is deadly). The OPPOSITE
+// half is always safe to fly through, so there's always an opening.
 function drawLaserGate(ctx: CanvasRenderingContext2D, o: Obstacle, biome: Biome) {
   const halfGap = o.gap / 2;
   const topEdge = o.gapY - halfGap;
@@ -320,53 +322,98 @@ function drawLaserGate(ctx: CanvasRenderingContext2D, o: Obstacle, biome: Biome)
   ctx.fillRect(o.x, topEdge - 10, OBSTACLE_WIDTH, 10);
   ctx.fillRect(o.x, botEdge, OBSTACLE_WIDTH, 10);
 
-  // Emitter glow dots
-  const emitColor = state === "on" ? "#ff3060" : state === "charging" ? "#ffd060" : "#e060ff";
-  ctx.fillStyle = emitColor;
+  // Which emitters are doing what right now
+  const topActive = state === "top_on";
+  const botActive = state === "bot_on";
+  const topCharging = state === "charge_top";
+  const botCharging = state === "charge_bot";
+
+  // Emitter glow dots — colour signals the state of each individual emitter
+  const dotColor = (active: boolean, charging: boolean) =>
+    active ? "#ff3060" : charging ? "#ffd060" : "#e060ff";
+  ctx.fillStyle = dotColor(topActive, topCharging);
   ctx.beginPath(); ctx.arc(cx, topEdge - 5, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = dotColor(botActive, botCharging);
   ctx.beginPath(); ctx.arc(cx, botEdge + 5, 5, 0, Math.PI * 2); ctx.fill();
 
-  // Beam
-  if (state === "charging") {
-    // Thin flickering pilot line telegraphing the imminent beam
-    ctx.save();
-    ctx.globalAlpha = 0.35 + Math.random() * 0.25;
-    ctx.strokeStyle = "#ffd060";
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(cx, topEdge);
-    ctx.lineTo(cx, botEdge);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-  } else if (state === "on") {
-    ctx.save();
-    // Outer bloom
-    const beamGrad = ctx.createLinearGradient(o.x, 0, o.x + OBSTACLE_WIDTH, 0);
-    beamGrad.addColorStop(0, "rgba(255,48,96,0)");
-    beamGrad.addColorStop(0.5, "rgba(255,80,120,0.5)");
-    beamGrad.addColorStop(1, "rgba(255,48,96,0)");
-    ctx.fillStyle = beamGrad;
-    ctx.fillRect(o.x, topEdge, OBSTACLE_WIDTH, botEdge - topEdge);
-    // Hot core
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 4;
-    ctx.shadowColor = "#ff3060";
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.moveTo(cx, topEdge);
-    ctx.lineTo(cx, botEdge);
-    ctx.stroke();
-    ctx.strokeStyle = "#ff6080";
-    ctx.lineWidth = 8;
-    ctx.globalAlpha = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(cx, topEdge);
-    ctx.lineTo(cx, botEdge);
-    ctx.stroke();
-    ctx.restore();
+  // Beam endpoints — each beam reaches LASER_BEAM_REACH into the gap
+  const gapHeight = botEdge - topEdge;
+  const topBeamEnd = topEdge + gapHeight * LASER_BEAM_REACH;
+  const botBeamEnd = botEdge - gapHeight * LASER_BEAM_REACH;
+
+  // Charging telegraph — thin flickering dashed pilot beam from one emitter
+  if (topCharging) {
+    drawChargeLine(ctx, cx, topEdge, topBeamEnd);
   }
+  if (botCharging) {
+    drawChargeLine(ctx, cx, botEdge, botBeamEnd);
+  }
+
+  // Active beam — half-corridor from the firing emitter
+  if (topActive) {
+    drawBeam(ctx, o.x, cx, topEdge, topBeamEnd);
+  }
+  if (botActive) {
+    drawBeam(ctx, o.x, cx, botEdge, botBeamEnd);
+  }
+}
+
+function drawChargeLine(
+  ctx: CanvasRenderingContext2D,
+  cx: number, y1: number, y2: number
+) {
+  ctx.save();
+  ctx.globalAlpha = 0.35 + Math.random() * 0.3;
+  ctx.strokeStyle = "#ffd060";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(cx, y1);
+  ctx.lineTo(cx, y2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawBeam(
+  ctx: CanvasRenderingContext2D,
+  oxLeft: number, cx: number, y1: number, y2: number
+) {
+  ctx.save();
+  // Outer bloom — a soft horizontal gradient over the corridor width
+  const beamGrad = ctx.createLinearGradient(oxLeft, 0, oxLeft + OBSTACLE_WIDTH, 0);
+  beamGrad.addColorStop(0, "rgba(255,48,96,0)");
+  beamGrad.addColorStop(0.5, "rgba(255,80,120,0.55)");
+  beamGrad.addColorStop(1, "rgba(255,48,96,0)");
+  ctx.fillStyle = beamGrad;
+  const yMin = Math.min(y1, y2);
+  const yMax = Math.max(y1, y2);
+  ctx.fillRect(oxLeft, yMin, OBSTACLE_WIDTH, yMax - yMin);
+
+  // Hot white core with red bloom shadow
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 4;
+  ctx.shadowColor = "#ff3060";
+  ctx.shadowBlur = 12;
+  ctx.beginPath();
+  ctx.moveTo(cx, y1);
+  ctx.lineTo(cx, y2);
+  ctx.stroke();
+  // Soft red over-layer
+  ctx.strokeStyle = "#ff6080";
+  ctx.lineWidth = 8;
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, y1);
+  ctx.lineTo(cx, y2);
+  ctx.stroke();
+  // Bright tip where the beam ends so the cutoff reads clearly
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(cx, y2, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 export function drawPickup(
   ctx: CanvasRenderingContext2D,
@@ -1007,7 +1054,109 @@ export function drawBullet(ctx: CanvasRenderingContext2D, b: Bullet) {
   ctx.restore();
 }
 
-// Subtle warp-streak accent layered over the space starfield.
+// Storm-biome tornado: a tall funnel built from rotating ellipses that taper
+// toward the ground. Position is owned by the caller; this just renders at
+// `x`. `frame` drives rotation and `phase` lets the caller offset the sway
+// independently per tornado.
+export function drawTornado(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  frame: number,
+  phase: number
+) {
+  // Geometry
+  const topY = 40;
+  const baseY = HEIGHT - 70; // sits a bit above the ground so mountains overlap
+  const topR = 56;
+  const baseR = 9;
+  const rings = 14;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+
+  // Subtle radial darkening behind it — feels like a debris cloud
+  const halo = ctx.createRadialGradient(x, (topY + baseY) / 2, 20, x, (topY + baseY) / 2, 110);
+  halo.addColorStop(0, "rgba(10,10,18,0.55)");
+  halo.addColorStop(1, "rgba(10,10,18,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(x - 110, topY - 30, 220, baseY - topY + 60);
+
+  // Stack of ellipses from top to base, each rotated and swayed slightly
+  for (let i = 0; i < rings; i++) {
+    const t = i / (rings - 1);              // 0 at top, 1 at base
+    const ringY = topY + (baseY - topY) * t;
+    // Funnel taper: radius eases out as t→1, gives that hourglass narrowing
+    const eased = Math.pow(t, 0.65);
+    const ringR = topR * (1 - eased) + baseR * eased;
+    // Each ring sways with its own phase offset so the funnel writhes
+    const sway = Math.sin(frame * 0.04 + phase + t * 2.8) * (10 + (1 - t) * 18);
+    const rx = x + sway;
+    // Squashed ellipses for perspective; rotated slowly per-frame
+    const rot = frame * 0.06 + i * 0.55 + phase;
+    const tilt = Math.sin(rot) * 0.18;
+    const ringH = ringR * 0.42;
+
+    // Outer dark shell
+    ctx.fillStyle = `rgba(28,28,42,${0.55 + t * 0.20})`;
+    ctx.beginPath();
+    ctx.ellipse(rx, ringY, ringR, ringH, tilt, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner lighter highlight on the leading edge
+    ctx.fillStyle = `rgba(96,96,128,${0.25 + t * 0.15})`;
+    ctx.beginPath();
+    ctx.ellipse(rx + ringR * 0.15, ringY, ringR * 0.65, ringH * 0.65, tilt, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Wispy streak on the trailing edge
+    ctx.strokeStyle = `rgba(160,160,190,${0.18 + t * 0.10})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(rx - ringR * 0.1, ringY, ringR * 1.05, ringH * 1.05, tilt, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Top "thundercloud" overhang
+  ctx.fillStyle = "rgba(20,20,32,0.85)";
+  ctx.beginPath();
+  ctx.ellipse(x, topY - 4, topR + 18, 22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(60,60,82,0.55)";
+  ctx.beginPath();
+  ctx.ellipse(x - topR * 0.3, topY - 8, topR * 0.7, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ground dust kicked up at the base
+  const dustY = baseY + 4;
+  ctx.fillStyle = "rgba(80,75,90,0.45)";
+  for (let i = 0; i < 5; i++) {
+    const a = frame * 0.08 + i * 1.3 + phase;
+    const dx = x + Math.cos(a) * (18 + i * 4);
+    const r = 8 + (i % 3) * 3;
+    ctx.beginPath();
+    ctx.ellipse(dx, dustY + Math.sin(a) * 2, r, r * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Swirling debris specks orbiting the funnel
+  ctx.fillStyle = "rgba(180,180,200,0.7)";
+  for (let i = 0; i < 9; i++) {
+    const spin = frame * 0.12 + i * 0.7 + phase;
+    const yT = (i / 9);
+    const orbitR = topR * 0.55 * (1 - yT * 0.55);
+    const dY = topY + (baseY - topY) * yT;
+    const dX = x + Math.cos(spin) * orbitR;
+    const dz = Math.sin(spin); // depth cue: dim when behind
+    const alpha = 0.35 + dz * 0.4;
+    ctx.globalAlpha = Math.max(0.1, alpha);
+    ctx.fillRect(dX - 1, dY - 1, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+
 export function drawSpaceWarp(ctx: CanvasRenderingContext2D, frame: number) {
   ctx.save();
   ctx.globalAlpha = 0.5;

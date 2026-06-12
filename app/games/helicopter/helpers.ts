@@ -98,15 +98,39 @@ export function clamp(v: number, lo: number, hi: number) {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-// Laser gate phase → visual/collision state. Off most of the cycle, with a
-// short telegraphed charge before the deadly window.
-export function laserState(movePhase: number): "off" | "charging" | "on" {
+// Laser gate phase → visual/collision state. The cycle alternates between
+// "off" (whole corridor safe), a brief charge telegraphing which half is
+// about to fire, and a half-on state where only THAT half of the corridor is
+// deadly. The opposite half stays open the whole time, so there's always at
+// least one safe passage — including two full-off windows per cycle.
+export type LaserPhase =
+  | "off"
+  | "charge_top"   // top emitter telegraphing — beam will fire downward
+  | "top_on"       // top half of the gap is deadly; bottom half is safe
+  | "charge_bot"
+  | "bot_on";
+
+export function laserState(movePhase: number): LaserPhase {
   const c = (((movePhase % LASER_CYCLE) + LASER_CYCLE) % LASER_CYCLE) / LASER_CYCLE;
-  if (c < 0.55) return "off";
-  if (c < 0.68) return "charging";
-  if (c < 0.92) return "on";
-  return "off";
+  // 0.00–0.30  off          (full corridor safe)
+  // 0.30–0.39  charge top   (telegraph)
+  // 0.39–0.58  top on       (bottom half safe)
+  // 0.58–0.66  off          (full corridor safe — second window)
+  // 0.66–0.75  charge bot
+  // 0.75–1.00  bot on       (top half safe)
+  if (c < 0.30) return "off";
+  if (c < 0.39) return "charge_top";
+  if (c < 0.58) return "top_on";
+  if (c < 0.66) return "off";
+  if (c < 0.75) return "charge_bot";
+  return "bot_on";
 }
+
+// Beam reach as a fraction of the gap height. 0.55 means each beam extends
+// 55% into the gap, leaving a ~45% safe band on the OPPOSITE side. Slight
+// overlap is intentional — keeps the visual confident — but the collision
+// math gives the player the full safe half (see index.tsx).
+export const LASER_BEAM_REACH = 0.55;
 
 // ===== Space flyer factories =====
 export function makeAsteroid(): Asteroid {

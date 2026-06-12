@@ -33,7 +33,7 @@ import {
   drawBackground, drawStars, drawSun, drawRain, drawLightningFlash,
   drawMountains, drawObstacle, drawPickup, drawHeli, drawMagnetAura,
   drawSlowmoOverlay, drawSmoke, drawSparks, drawExplosion,
-  drawAsteroid, drawJet, drawBullet, drawSpaceWarp,
+  drawAsteroid, drawJet, drawBullet, drawSpaceWarp, drawTornado,
 } from "./drawing";
 import {
   initAudio, setMuted as setAudioMuted,
@@ -42,7 +42,6 @@ import {
   playNearMiss, playBiomeTransition, playComboUp, playLifeLost,
   startRotor, stopRotor,
   setMusicForBiome, pauseMusic, resumeMusic, stopMusic,
-  preloadMusic, getMusicTrackCount,
 } from "./sound";
 
 const SPACE_IDX = BIOMES.findIndex((b) => b.id === "space");
@@ -66,9 +65,6 @@ export default function HelicopterGame() {
   const [comboCount, setComboCount] = useState(0);
   const [comboMultiplier, setComboMultiplier] = useState(1);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Audio preload / offline readiness
-  const [audioReady, setAudioReady] = useState(false);
-  const [audioLoaded, setAudioLoaded] = useState(0);
   const [settings, setSettingsState] = useState({
     sound: true,
     screenShake: true,
@@ -96,22 +92,14 @@ export default function HelicopterGame() {
     };
   }, []);
 
-  // Register the music service worker (offline) and preload all tracks up
-  // front, driving the loading overlay. Best-effort: failures never block play.
+  // Register the music service worker so once a track has played online, it
+  // remains available offline on subsequent visits. No upfront preload — each
+  // track streams when its biome arrives. Failures are silent (offline cache
+  // simply unavailable on this device).
   useEffect(() => {
-    let cancelled = false;
-
     if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => { /* offline cache unavailable; ignore */ });
+      navigator.serviceWorker.register("/sw.js").catch(() => { /* ignore */ });
     }
-
-    preloadMusic((loaded) => {
-      if (!cancelled) setAudioLoaded(loaded);
-    }).finally(() => {
-      if (!cancelled) setAudioReady(true);
-    });
-
-    return () => { cancelled = true; };
   }, []);
 
   const updateSetting = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
@@ -164,6 +152,9 @@ export default function HelicopterGame() {
     magnetUntil: 0,
     lightning: 0,
     nextLightningAt: 0,
+    // Storm tornado parallax bg
+    tornadoX: WIDTH * 0.7,
+    tornadoPhase: 0,
     lastScrapeAt: 0,
     lastNearMissAt: 0,
     // Biome tracking
@@ -264,6 +255,8 @@ export default function HelicopterGame() {
       magnetUntil: 0,
       lightning: 0,
       nextLightningAt: 0,
+      tornadoX: WIDTH * (0.5 + Math.random() * 0.5),
+      tornadoPhase: Math.random() * Math.PI * 2,
       lastScrapeAt: 0,
       lastNearMissAt: 0,
       biomeIdx: 0,
@@ -399,12 +392,13 @@ export default function HelicopterGame() {
     let frame = 0;
 
     const draw = () => {
-      const s = stateRef.current;
-      frame++;
-      const now = Date.now();
+      try {
+        const s = stateRef.current;
+        frame++;
+        const now = Date.now();
 
-      const slowMoActive = s.slowMoUntil > now;
-      const magnetActive = s.magnetUntil > now;
+        const slowMoActive = s.slowMoUntil > now;
+        const magnetActive = s.magnetUntil > now;
       const timeScale = slowMoActive ? SLOWMO_FACTOR : 1;
       const currentBiome = BIOMES[s.biomeIdx];
 
@@ -487,12 +481,14 @@ export default function HelicopterGame() {
             }
           }
           if (o.type === "laser") {
-            // Advance the on/off cycle (frames). Buzz briefly as the beam fires.
+            // Advance the cycle (frames). Buzz briefly as either beam fires.
             const prev = laserState(o.movePhase);
             o.movePhase += timeScale;
-            const nowState = laserState(o.movePhase);
-            if (prev !== "on" && nowState === "on" &&
-                Math.abs(o.x + OBSTACLE_WIDTH / 2 - HELI_X) < 220) {
+            const next = laserState(o.movePhase);
+            const becameLive =
+              (next === "top_on" && prev !== "top_on") ||
+              (next === "bot_on" && prev !== "bot_on");
+            if (becameLive && Math.abs(o.x + OBSTACLE_WIDTH / 2 - HELI_X) < 220) {
               playSawBuzz();
             }
           }
@@ -668,6 +664,17 @@ export default function HelicopterGame() {
           s.rain.length = 0;
         }
 
+        // ---- Tornado parallax (storm biome) ----
+        // Scrolls slower than the near mountains so it sits in the deep
+        // background. Respawns off the right when it leaves the left edge.
+        if (currentBiome.id === "storm") {
+          s.tornadoX -= effSpeed * 0.18;
+          if (s.tornadoX < -120) {
+            s.tornadoX = WIDTH + 120 + Math.random() * 200;
+            s.tornadoPhase = Math.random() * Math.PI * 2;
+          }
+        }
+
         // ---- Lightning (storm biome) ----
         if (currentBiome.hasLightning && weatherOn) {
           if (s.nextLightningAt === 0) s.nextLightningAt = now + 3000 + Math.random() * 4000;
@@ -713,12 +720,25 @@ export default function HelicopterGame() {
               continue;
             }
             if (o.type === "laser") {
-              // Pillars still collide via the generic logic below, but when the
-              // beam is live the whole corridor is deadly.
+              // Only the firing HALF of the gap is deadly. The other half is
+              // always safe to fly through. The pillars themselves still
+              // collide via the generic logic below.
               const lx = HELI_X + HELI_W / 2 > o.x && HELI_X - HELI_W / 2 < o.x + OBSTACLE_WIDTH;
-              if (lx && laserState(o.movePhase) === "on") {
-                crashed = true;
-                break;
+              if (lx) {
+                const ls = laserState(o.movePhase);
+                const heliCY = s.y;
+                const halfGap = o.gap / 2;
+                const gapTop = o.gapY - halfGap;
+                const gapBot = o.gapY + halfGap;
+                const mid = o.gapY;
+                if (ls === "top_on" && heliCY < mid && heliCY > gapTop) {
+                  crashed = true;
+                  break;
+                }
+                if (ls === "bot_on" && heliCY > mid && heliCY < gapBot) {
+                  crashed = true;
+                  break;
+                }
               }
             }
             const xOverlap = HELI_X + HELI_W / 2 > o.x && HELI_X - HELI_W / 2 < o.x + OBSTACLE_WIDTH;
@@ -927,6 +947,7 @@ export default function HelicopterGame() {
       drawSun(ctx, currentBiome);
       drawStars(ctx, s.stars, currentBiome, frame);
       if (currentBiome.id === "space") drawSpaceWarp(ctx, frame);
+      if (currentBiome.id === "storm") drawTornado(ctx, s.tornadoX, frame, s.tornadoPhase);
       drawMountains(ctx, s.farMountains, s.nearMountains, currentBiome);
       drawRain(ctx, s.rain);
 
@@ -1011,6 +1032,12 @@ export default function HelicopterGame() {
       }
 
       ctx.restore();
+      } catch (err) {
+        // Defence in depth: any uncaught error inside a frame must NOT kill
+        // the whole loop. Log it and keep going on the next frame.
+        // eslint-disable-next-line no-console
+        console.warn("[helicopter loop] frame error (recovering):", err);
+      }
       raf = requestAnimationFrame(draw);
     };
     draw();
@@ -1288,27 +1315,6 @@ export default function HelicopterGame() {
           height={HEIGHT}
           className="w-full h-full rounded border-2 border-[var(--border)] cursor-pointer"
         />
-
-        {/* Audio preload / offline-cache overlay */}
-        {!audioReady && (
-          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/90 rounded p-6 text-center">
-            <h2 className="font-[family-name:var(--font-display)] text-base sm:text-lg text-[var(--accent)] mb-1">
-              HELICOPTER
-            </h2>
-            <p className="font-[family-name:var(--font-mono)] text-base text-[var(--muted)] mb-4 flicker">
-              CACHING SOUNDTRACK FOR OFFLINE PLAY…
-            </p>
-            <div className="w-56 max-w-[70%] h-3 bg-[var(--surface-2)] rounded-full overflow-hidden border border-[var(--border)]">
-              <div
-                className="h-full bg-[var(--crt-green)] transition-[width] duration-300 ease-out"
-                style={{ width: `${(audioLoaded / Math.max(1, getMusicTrackCount())) * 100}%` }}
-              />
-            </div>
-            <p className="mt-3 font-[family-name:var(--font-mono)] text-sm text-[var(--muted)]">
-              {audioLoaded} / {getMusicTrackCount()} tracks
-            </p>
-          </div>
-        )}
 
         {/* Biome banner */}
         {biomeBanner && (

@@ -62,9 +62,10 @@ export const COIN_PATCH_SPACING = 30;    // px between coins in the grid
 export const COIN_PATCH_OFFSET = 150;    // x past the pillar where the grid sits
 
 // ===== Laser gate (Neon biome) =====
-// Cycle measured in frames. Beam is off most of the time with a brief
-// telegraphed charge, so a well-timed pilot always has a window.
-export const LASER_CYCLE = 96;
+// Cycle measured in frames. The cycle alternates between off-windows and
+// half-firing states (top OR bottom only) so there's always a safe half to
+// fly through; see laserState() in helpers.ts.
+export const LASER_CYCLE = 140;
 
 // ===== Space biome =====
 // On entering space, all pillars clear for this long (open void), then

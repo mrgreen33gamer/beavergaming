@@ -197,8 +197,10 @@ const FADE_DURATION_MS = 1100;
 
 type Track = { el: HTMLAudioElement; key: number };
 
+// Audio elements are created LAZILY on first use of each biome, not all up
+// front. No mass-preload — the soundtrack streams when its biome arrives.
+// Created elements are cached so re-entry into a biome doesn't recreate them.
 const elements = new Map<number, HTMLAudioElement>();
-let elementsInitialized = false;
 
 let activeTrack: Track | null = null;
 let fadingOut: Track[] = [];
@@ -207,37 +209,42 @@ let lastFadeTime = 0;
 let musicMuted = false;
 let pendingAutoplayRetry: (() => void) | null = null;
 
-export function getMusicTrackCount(): number {
-  return Object.keys(MUSIC_TRACKS).length;
+// Clamp helper — HTMLMediaElement.volume must be in [0,1] or Firefox throws
+// IndexSizeError. Every volume assignment goes through `setVolume`.
+function clamp01(v: number): number {
+  if (!Number.isFinite(v) || v < 0) return 0;
+  if (v > 1) return 1;
+  return v;
+}
+function setVolume(el: HTMLAudioElement, v: number) {
+  try { el.volume = clamp01(v); } catch { /* never throw out of audio code */ }
 }
 
-// Create one Audio element per biome on first use. Each starts buffering
-// immediately so they're ready for instant playback later.
-function initElements() {
-  if (elementsInitialized) return;
-  if (typeof Audio === "undefined") return; // SSR / non-browser
-  for (const [idxStr, url] of Object.entries(MUSIC_TRACKS)) {
-    const idx = Number(idxStr);
-    try {
-      const el = new Audio();
-      el.loop = true;
-      el.preload = "auto";
-      el.volume = 0;
-      // crossOrigin omitted — same-origin /music/* needs no CORS.
-      el.src = url;
-      el.addEventListener("error", () => {
-        // eslint-disable-next-line no-console
-        console.warn(`[helicopter music] track for biome ${idx} (${url}) failed to load — check that the file exists in /public${url}`);
-      });
-      // Kick off buffering. Some browsers ignore preload="auto" alone.
-      try { el.load(); } catch { /* ignore */ }
-      elements.set(idx, el);
-    } catch (err) {
+// Lazy element creation for a biome. Returns null if the biome has no track
+// or audio is unsupported in this environment.
+function elementFor(biomeIdx: number): HTMLAudioElement | null {
+  if (typeof Audio === "undefined") return null;
+  const cached = elements.get(biomeIdx);
+  if (cached) return cached;
+  const url = MUSIC_TRACKS[biomeIdx];
+  if (!url) return null;
+  try {
+    const el = new Audio();
+    el.loop = true;
+    el.preload = "auto";
+    try { el.volume = 0; } catch { /* ignore */ }
+    el.src = url;
+    el.addEventListener("error", () => {
       // eslint-disable-next-line no-console
-      console.warn(`[helicopter music] could not create audio element for biome ${idx}:`, err);
-    }
+      console.warn(`[helicopter music] biome ${biomeIdx} (${url}) failed to load — check /public${url}`);
+    });
+    elements.set(biomeIdx, el);
+    return el;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[helicopter music] could not create audio for biome ${biomeIdx}:`, err);
+    return null;
   }
-  elementsInitialized = true;
 }
 
 function approach(current: number, goal: number, step: number) {
@@ -256,17 +263,17 @@ function armAutoplayRetry(retry: () => void) {
     pendingAutoplayRetry = null;
     window.removeEventListener("pointerdown", handler);
     window.removeEventListener("keydown", handler);
-    if (fn) fn();
+    if (fn) { try { fn(); } catch { /* ignore */ } }
   };
   window.addEventListener("pointerdown", handler, { once: true });
   window.addEventListener("keydown", handler, { once: true });
 }
 
 function tryPlay(t: Track) {
-  const p = t.el.play();
+  let p: Promise<void> | undefined;
+  try { p = t.el.play() as Promise<void> | undefined; } catch { return; }
   if (p && typeof p.catch === "function") {
     p.catch((err: unknown) => {
-      // Autoplay rejection — retry on the next user gesture.
       if (err && (err as { name?: string }).name === "NotAllowedError") {
         armAutoplayRetry(() => { if (activeTrack === t) tryPlay(t); });
         return;
@@ -277,39 +284,50 @@ function tryPlay(t: Track) {
   }
 }
 
+// Cap a single tick's elapsed time. Backgrounded tabs return huge deltas;
+// without a cap the fade overshoots and Firefox throws on out-of-range volume.
+const MAX_FADE_DT_MS = 80;
+
 function ensureFadeLoop() {
   if (fadeRaf !== null) return;
-  lastFadeTime = performance.now();
+  lastFadeTime = (typeof performance !== "undefined" ? performance.now() : Date.now());
   const tick = (now: number) => {
-    const dt = now - lastFadeTime;
-    lastFadeTime = now;
-    const step = dt / FADE_DURATION_MS;
+    fadeRaf = null;
+    try {
+      let dt = now - lastFadeTime;
+      lastFadeTime = now;
+      if (!Number.isFinite(dt) || dt < 0) dt = 16;
+      if (dt > MAX_FADE_DT_MS) dt = MAX_FADE_DT_MS;
+      const step = dt / FADE_DURATION_MS;
 
-    if (activeTrack) {
-      const goal = musicMuted ? 0 : MUSIC_TARGET_VOL;
-      if (Math.abs(activeTrack.el.volume - goal) > 0.001) {
-        activeTrack.el.volume = approach(activeTrack.el.volume, goal, step);
-      }
-    }
-
-    if (fadingOut.length > 0) {
-      fadingOut = fadingOut.filter(t => {
-        t.el.volume = approach(t.el.volume, 0, step);
-        if (t.el.volume <= 0.001) {
-          // Pause but DO NOT clear src — we reuse these elements next time
-          // the player visits this biome.
-          try { t.el.pause(); } catch { /* ignore */ }
-          return false;
+      if (activeTrack) {
+        const goal = musicMuted ? 0 : MUSIC_TARGET_VOL;
+        if (Math.abs(activeTrack.el.volume - goal) > 0.001) {
+          setVolume(activeTrack.el, approach(activeTrack.el.volume, goal, step));
         }
-        return true;
-      });
-    }
+      }
 
-    const activeAtGoal = !activeTrack ||
-      Math.abs(activeTrack.el.volume - (musicMuted ? 0 : MUSIC_TARGET_VOL)) <= 0.001;
-    if (activeAtGoal && fadingOut.length === 0) {
-      fadeRaf = null;
-      return;
+      if (fadingOut.length > 0) {
+        fadingOut = fadingOut.filter(t => {
+          const nextVol = approach(t.el.volume, 0, step);
+          setVolume(t.el, nextVol);
+          if (nextVol <= 0.001) {
+            try { t.el.pause(); } catch { /* ignore */ }
+            return false;
+          }
+          return true;
+        });
+      }
+
+      const activeAtGoal = !activeTrack ||
+        Math.abs(activeTrack.el.volume - (musicMuted ? 0 : MUSIC_TARGET_VOL)) <= 0.001;
+      if (activeAtGoal && fadingOut.length === 0) {
+        return; // loop idle until next event re-arms it
+      }
+    } catch (err) {
+      // Defence in depth — never let a thrown error kill the loop forever.
+      // eslint-disable-next-line no-console
+      console.warn("[helicopter music] fade tick error (recovering):", err);
     }
     fadeRaf = requestAnimationFrame(tick);
   };
@@ -317,28 +335,28 @@ function ensureFadeLoop() {
 }
 
 // Switch background music to the track configured for the given biome index.
-// Pass -1 (or any unmapped index) to fade out and leave silent.
+// Pass any unmapped index to fade out and leave silent.
 export function setMusicForBiome(biomeIdx: number) {
-  initElements();
-  const target = elements.get(biomeIdx) ?? null;
+  let target: HTMLAudioElement | null = null;
+  try {
+    target = elementFor(biomeIdx);
+  } catch { target = null; }
 
   if (activeTrack && activeTrack.key === biomeIdx) return;
   if (!activeTrack && !target) return;
 
-  // Demote the current active track to fading-out.
   if (activeTrack) {
     fadingOut.push(activeTrack);
     activeTrack = null;
   }
 
   if (target) {
-    // If this element happens to be mid-fade-out (e.g. quick game restart),
-    // pluck it out so we don't fight ourselves fading it down and up.
+    // Pull target out of fadingOut if it's mid-fade-down (game restart case).
     fadingOut = fadingOut.filter(t => t.el !== target);
-
-    // Fresh start on each biome entry.
-    try { target.currentTime = 0; } catch { /* may throw before metadata */ }
-    target.volume = 0;
+    // currentTime can throw before metadata loads — and we don't actually
+    // need to restart from 0 for atmospheric loops, so just skip if it errors.
+    try { target.currentTime = 0; } catch { /* ignore */ }
+    setVolume(target, 0);
     const t: Track = { el: target, key: biomeIdx };
     activeTrack = t;
     tryPlay(t);
@@ -348,9 +366,7 @@ export function setMusicForBiome(biomeIdx: number) {
 }
 
 export function pauseMusic() {
-  if (activeTrack) {
-    try { activeTrack.el.pause(); } catch { /* ignore */ }
-  }
+  if (activeTrack) { try { activeTrack.el.pause(); } catch { /* ignore */ } }
 }
 
 export function resumeMusic() {
@@ -368,55 +384,4 @@ export function stopMusic() {
 export function setMusicMuted(m: boolean) {
   musicMuted = m;
   ensureFadeLoop();
-}
-
-// Drive the loading overlay: wait until every track is buffered enough to
-// play through, or up to `timeoutMs`. Safe to call repeatedly. Never rejects;
-// a track that fails to buffer simply isn't included in the count and the
-// game still becomes playable.
-export function preloadMusic(
-  onProgress?: (loaded: number, total: number) => void,
-  timeoutMs = 12000
-): Promise<void> {
-  initElements();
-  const total = elements.size;
-  if (total === 0) {
-    try { onProgress?.(0, 0); } catch { /* ignore */ }
-    return Promise.resolve();
-  }
-
-  let loaded = 0;
-  const bump = () => {
-    loaded++;
-    try { onProgress?.(loaded, total); } catch { /* ignore */ }
-  };
-
-  const waitForOne = (el: HTMLAudioElement) =>
-    new Promise<void>((resolve) => {
-      // HAVE_ENOUGH_DATA (readyState 4) means the browser is confident it can
-      // play through without stalling.
-      if (el.readyState >= 4) { resolve(); return; }
-      const done = () => {
-        el.removeEventListener("canplaythrough", done);
-        el.removeEventListener("canplay", done);
-        el.removeEventListener("loadeddata", done);
-        el.removeEventListener("error", done);
-        resolve();
-      };
-      // Listen to a few events because browsers fire different ones first
-      // depending on connection speed / codec / autoplay state.
-      el.addEventListener("canplaythrough", done, { once: true });
-      el.addEventListener("canplay", done, { once: true });
-      el.addEventListener("loadeddata", done, { once: true });
-      el.addEventListener("error", done, { once: true });
-      // Belt and suspenders: some browsers throttle preload until user gesture
-      // — re-kick the loader so progress isn't gated on Chrome's heuristics.
-      try { el.load(); } catch { /* ignore */ }
-    });
-
-  const tracked = (el: HTMLAudioElement) => waitForOne(el).then(bump);
-
-  const all = Promise.all(Array.from(elements.values()).map(tracked)).then(() => undefined);
-  const timeout = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
-  return Promise.race([all, timeout]);
 }
