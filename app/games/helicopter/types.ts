@@ -12,6 +12,7 @@ export type PickupType =
   | "red_gem"
   | "gold_gem"
   | "coin"
+  | "heart"
   | "shield"
   | "slowmo"
   | "magnet";

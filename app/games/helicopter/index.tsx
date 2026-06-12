@@ -18,8 +18,10 @@ import {
   NEAR_MISS_POINTS, NEAR_MISS_COOLDOWN_MS,
   COMBO_TIMEOUT_MS,
   EASY_LIVES, EASY_GAP_BONUS, INVULN_AFTER_HIT_MS,
+  MAX_LIVES_EASY, HEART_SPAWN_CHANCE_VOLCANO, HEART_OVERFLOW_POINTS,
   HIGHSCORE_KEY,
   COIN_POINTS, COIN_PATCH_CHANCE, COIN_PATCH_SPACING, COIN_PATCH_OFFSET,
+  LASER_SPACING_BONUS,
   SPACE_CLEAR_MS, SPACE_GAP_MIN, SPACE_GAP_MAX,
   ASTEROID_MIN_MS, ASTEROID_MAX_MS, JET_MIN_MS, JET_MAX_MS,
 } from "./constants";
@@ -27,7 +29,8 @@ import { BIOMES, getBiomeIndex, pickObstacleType } from "./biomes";
 import {
   addBurst, makeObstacle, makePickup, rollPickup,
   getId, resetIdCounter, getComboMultiplier,
-  laserState, makeAsteroid, makeJet, makeBullet,
+  laserPhase, laserDeadlyOpening, laserGeometry,
+  makeAsteroid, makeJet, makeBullet,
 } from "./helpers";
 import {
   drawBackground, drawStars, drawSun, drawRain, drawLightningFlash,
@@ -48,6 +51,8 @@ const SPACE_IDX = BIOMES.findIndex((b) => b.id === "space");
 
 export default function HelicopterGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fullscreenRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
@@ -99,6 +104,46 @@ export default function HelicopterGame() {
   useEffect(() => {
     if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => { /* ignore */ });
+    }
+  }, []);
+
+  // Track whether the wrapper is currently the fullscreen element. We listen
+  // for the platform event so the state stays in sync even when the user exits
+  // fullscreen with Esc, swipe-down, or the system back button.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const handler = () => {
+      const el = document.fullscreenElement
+        ?? (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
+        ?? null;
+      setIsFullscreen(el === fullscreenRef.current);
+    };
+    document.addEventListener("fullscreenchange", handler);
+    document.addEventListener("webkitfullscreenchange", handler);
+    return () => {
+      document.removeEventListener("fullscreenchange", handler);
+      document.removeEventListener("webkitfullscreenchange", handler);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (typeof document === "undefined") return;
+    const wrapper = fullscreenRef.current;
+    if (!wrapper) return;
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element;
+      webkitExitFullscreen?: () => Promise<void>;
+    };
+    const inFullscreen = !!(document.fullscreenElement ?? doc.webkitFullscreenElement);
+    if (!inFullscreen) {
+      const req = (
+        wrapper.requestFullscreen
+        ?? (wrapper as HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen
+      );
+      try { req?.call(wrapper)?.catch?.(() => { /* user gesture required or unsupported */ }); } catch { /* ignore */ }
+    } else {
+      const exit = document.exitFullscreen ?? doc.webkitExitFullscreen;
+      try { exit?.call(document)?.catch?.(() => { /* ignore */ }); } catch { /* ignore */ }
     }
   }, []);
 
@@ -481,13 +526,14 @@ export default function HelicopterGame() {
             }
           }
           if (o.type === "laser") {
-            // Advance the cycle (frames). Buzz briefly as either beam fires.
-            const prev = laserState(o.movePhase);
+            // Advance the cycle (frames). Buzz when a beam enters its BURST
+            // state (the super-bright flash that opens each fire window).
+            const prev = laserPhase(o.movePhase);
             o.movePhase += timeScale;
-            const next = laserState(o.movePhase);
+            const next = laserPhase(o.movePhase);
             const becameLive =
-              (next === "top_on" && prev !== "top_on") ||
-              (next === "bot_on" && prev !== "bot_on");
+              (next === "burst_upper" && prev !== "burst_upper") ||
+              (next === "burst_lower" && prev !== "burst_lower");
             if (becameLive && Math.abs(o.x + OBSTACLE_WIDTH / 2 - HELI_X) < 220) {
               playSawBuzz();
             }
@@ -498,11 +544,17 @@ export default function HelicopterGame() {
           s.obstacles.shift();
           // Space uses its own room spawner below; other biomes chain here.
           if (currentBiome.id !== "space" && s.obstacles.length > 0) {
-            const lastX = s.obstacles[s.obstacles.length - 1].x;
-            const nextX = lastX + OBSTACLE_SPACING;
+            const lastObstacle = s.obstacles[s.obstacles.length - 1];
+            const lastX = lastObstacle.x;
             const type = pickObstacleType(currentBiome.id);
+            // Laser columns need more room before AND after, so the player can
+            // read the eye telegraph and time the swap between openings.
+            let nextX = lastX + OBSTACLE_SPACING;
+            if (type === "laser" || lastObstacle.type === "laser") {
+              nextX += LASER_SPACING_BONUS;
+            }
             // Clamp gapY so consecutive pillars don't require impossible swings
-            const prevGapY = s.obstacles[s.obstacles.length - 1].gapY;
+            const prevGapY = lastObstacle.gapY;
             const maxDelta = 110;
             const minGapY = Math.max(90, prevGapY - maxDelta);
             const maxGapY = Math.min(HEIGHT - 90, prevGapY + maxDelta);
@@ -523,6 +575,21 @@ export default function HelicopterGame() {
             } else if (type === "static" && Math.random() < COIN_PATCH_CHANCE) {
               // 3x3 spinning-coin patch tucked in the corridor past a still pillar
               spawnCoinPatch(s, nextX + COIN_PATCH_OFFSET, gapY);
+            }
+
+            // Heart pickup — extra-life token. Only spawns in volcano biome
+            // on easy difficulty, and only while there's room to grow lives.
+            if (
+              currentBiome.id === "volcanic" &&
+              s.difficulty === "easy" &&
+              s.lives < MAX_LIVES_EASY &&
+              Math.random() < HEART_SPAWN_CHANCE_VOLCANO &&
+              type !== "laser"  // don't put a heart at a laser pillar — players need to focus
+            ) {
+              const hy = Math.max(60, Math.min(HEIGHT - 60, gapY + (Math.random() - 0.5) * 40));
+              // Offset away from any pickup we already placed to avoid overlap
+              const hx = nextX + PICKUP_OFFSET_FROM_PILLAR + (pickupType ? 90 : 0);
+              s.pickups.push(makePickup("heart", hx, hy));
             }
           }
         }
@@ -720,26 +787,24 @@ export default function HelicopterGame() {
               continue;
             }
             if (o.type === "laser") {
-              // Only the firing HALF of the gap is deadly. The other half is
-              // always safe to fly through. The pillars themselves still
-              // collide via the generic logic below.
-              const lx = HELI_X + HELI_W / 2 > o.x && HELI_X - HELI_W / 2 < o.x + OBSTACLE_WIDTH;
-              if (lx) {
-                const ls = laserState(o.movePhase);
-                const heliCY = s.y;
-                const halfGap = o.gap / 2;
-                const gapTop = o.gapY - halfGap;
-                const gapBot = o.gapY + halfGap;
-                const mid = o.gapY;
-                if (ls === "top_on" && heliCY < mid && heliCY > gapTop) {
-                  crashed = true;
-                  break;
-                }
-                if (ls === "bot_on" && heliCY > mid && heliCY < gapBot) {
-                  crashed = true;
-                  break;
-                }
+              const xOverlapL = HELI_X + HELI_W / 2 > o.x && HELI_X - HELI_W / 2 < o.x + OBSTACLE_WIDTH;
+              if (!xOverlapL) continue;
+              const geo = laserGeometry(o.gapY, o.gap);
+              const heliTop = s.y - HELI_H / 2;
+              const heliBot = s.y + HELI_H / 2;
+              // Solid pillar parts: above the upper opening, the middle bar, below the lower opening
+              if (heliTop < geo.topEdge) { crashed = true; break; }
+              if (heliBot > geo.botEdge) { crashed = true; break; }
+              if (heliBot > geo.barTop && heliTop < geo.barBot) { crashed = true; break; }
+              // Active beam in the deadly opening
+              const deadly = laserDeadlyOpening(laserPhase(o.movePhase));
+              if (deadly === "upper" && heliBot > geo.topEdge && heliTop < geo.midTop) {
+                crashed = true; break;
               }
+              if (deadly === "lower" && heliBot > geo.midBot && heliTop < geo.botEdge) {
+                crashed = true; break;
+              }
+              continue; // laser handled fully; don't fall through to generic
             }
             const xOverlap = HELI_X + HELI_W / 2 > o.x && HELI_X - HELI_W / 2 < o.x + OBSTACLE_WIDTH;
             if (!xOverlap) continue;
@@ -1167,6 +1232,35 @@ export default function HelicopterGame() {
       setGemsCollected(s.gemsCollected);
       setGemPoints(s.gemPoints);
       playGemCollect();
+    } else if (p.type === "heart") {
+      // Extra-life pickup — only spawned in volcano on easy. If we're already
+      // at the cap, fall back to a small score bonus so the pickup still
+      // feels rewarding to grab.
+      if (s.lives < MAX_LIVES_EASY) {
+        s.lives += 1;
+        setLives(s.lives);
+        s.floatingTexts.push({
+          id: getId(), x: p.x, y: p.y,
+          text: "+1 LIFE", color: "#ff6b6b",
+          life: 60, maxLife: 60, vy: -1.5,
+        });
+        addBurst(s.particles, 12, () => {
+          const a = Math.random() * Math.PI * 2;
+          return {
+            x: p.x, y: p.y, vx: Math.cos(a) * 2.2, vy: Math.sin(a) * 2.2,
+            life: 24, maxLife: 24, color: "#ff6b6b", size: 2.5, gravity: 0,
+          };
+        });
+      } else {
+        s.gemPoints += HEART_OVERFLOW_POINTS;
+        setGemPoints(s.gemPoints);
+        s.floatingTexts.push({
+          id: getId(), x: p.x, y: p.y,
+          text: `+${HEART_OVERFLOW_POINTS}`, color: "#ff6b6b",
+          life: 50, maxLife: 50, vy: -1.5,
+        });
+      }
+      playPowerUp();
     } else if (p.type === "shield") {
       s.shieldActive = true;
       setActiveShield(true);
@@ -1247,11 +1341,11 @@ export default function HelicopterGame() {
           {/* Lives */}
           {started && difficulty === "easy" && (
             <span className="text-base">
-              {Array.from({ length: lives }, (_, i) => (
-                <span key={i} className="text-[#d63d3d]">♥</span>
+              {Array.from({ length: Math.min(lives, MAX_LIVES_EASY) }, (_, i) => (
+                <span key={`f${i}`} className="text-[#d63d3d]">♥</span>
               ))}
-              {Array.from({ length: EASY_LIVES - lives }, (_, i) => (
-                <span key={i} className="text-[#3a2218]">♥</span>
+              {Array.from({ length: Math.max(0, EASY_LIVES - lives) }, (_, i) => (
+                <span key={`e${i}`} className="text-[#3a2218]">♥</span>
               ))}
             </span>
           )}
@@ -1292,8 +1386,13 @@ export default function HelicopterGame() {
       )}
 
       <div
-        className="relative w-full max-w-[800px]"
-        style={{ aspectRatio: `${WIDTH}/${HEIGHT}` }}
+        ref={fullscreenRef}
+        className={
+          isFullscreen
+            ? "fixed inset-0 z-50 bg-black flex items-center justify-center"
+            : "relative w-full max-w-[800px]"
+        }
+        style={isFullscreen ? undefined : { aspectRatio: `${WIDTH}/${HEIGHT}` }}
         onMouseDown={() => {
           if (stateRef.current.paused) return;
           if (!started || gameOver) return;
@@ -1313,8 +1412,46 @@ export default function HelicopterGame() {
           ref={canvasRef}
           width={WIDTH}
           height={HEIGHT}
-          className="w-full h-full rounded border-2 border-[var(--border)] cursor-pointer"
+          className={
+            isFullscreen
+              ? "max-w-full max-h-full rounded-none border-0 cursor-pointer touch-none"
+              : "w-full h-full rounded border-2 border-[var(--border)] cursor-pointer touch-none"
+          }
+          style={
+            isFullscreen
+              ? { width: "auto", height: "auto", aspectRatio: `${WIDTH}/${HEIGHT}`, maxWidth: "100vw", maxHeight: "100vh" }
+              : undefined
+          }
         />
+
+        {/* Floating control buttons (visible on touch screens; harmless on desktop).
+            Sit on top of the canvas; stop click propagation so they don't trigger fly-up. */}
+        {started && !gameOver && (
+          <div className="absolute top-2 right-2 flex gap-2 z-20 pointer-events-none">
+            <button
+              type="button"
+              aria-label={paused ? "Resume" : "Pause"}
+              className="pointer-events-auto pixel-edge px-2 py-1 rounded bg-black/55 text-[var(--foreground)] font-[family-name:var(--font-mono)] text-sm hover:bg-black/75 active:scale-95 transition select-none"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const newPaused = !stateRef.current.paused;
+                stateRef.current.paused = newPaused;
+                setPaused(newPaused);
+                if (newPaused) pauseMusic(); else resumeMusic();
+              }}
+            >{paused ? "▶" : "❚❚"}</button>
+            <button
+              type="button"
+              aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              className="pointer-events-auto pixel-edge px-2 py-1 rounded bg-black/55 text-[var(--foreground)] font-[family-name:var(--font-mono)] text-sm hover:bg-black/75 active:scale-95 transition select-none"
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+            >{isFullscreen ? "⤓" : "⛶"}</button>
+          </div>
+        )}
 
         {/* Biome banner */}
         {biomeBanner && (
@@ -1363,7 +1500,7 @@ export default function HelicopterGame() {
               </div>
             )}
             {/* Difficulty buttons */}
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-center">
               <button
                 onClick={() => resetGame("easy")}
                 className="pixel-edge px-4 py-2 rounded bg-[#7fd650] text-[var(--background)] font-[family-name:var(--font-display)] text-xs"
@@ -1375,6 +1512,13 @@ export default function HelicopterGame() {
                 className="pixel-edge px-4 py-2 rounded bg-[#d63d3d] text-[var(--foreground)] font-[family-name:var(--font-display)] text-xs"
               >
                 HARD
+              </button>
+              <button
+                onClick={toggleFullscreen}
+                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                className="pixel-edge px-3 py-2 rounded bg-[var(--surface-2)] text-[var(--foreground)] font-[family-name:var(--font-mono)] text-base"
+              >
+                {isFullscreen ? "⤓" : "⛶"}
               </button>
             </div>
             <div className="mt-2 font-[family-name:var(--font-mono)] text-sm text-[var(--muted)] text-center">

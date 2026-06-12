@@ -5,7 +5,7 @@ import type {
 import {
   OBSTACLE_GAP_DEFAULT, OBSTACLE_GAP_NARROW, HEIGHT, MAX_PARTICLES,
   BLUE_GEM_CHANCE, GREEN_GEM_CHANCE, RED_GEM_CHANCE, GOLD_GEM_CHANCE, POWERUP_CHANCE,
-  LASER_CYCLE, WIDTH, JET_BULLET_SPEED,
+  LASER_CYCLE, LASER_BAR_HEIGHT, WIDTH, JET_BULLET_SPEED,
 } from "./constants";
 
 let nextId = 1;
@@ -35,7 +35,12 @@ export function addBurst(
 
 // Build an obstacle given a type and a gap-Y. gapBonus widens the gap (Easy mode).
 export function makeObstacle(type: ObstacleType, x: number, gapY: number, gapBonus = 0): Obstacle {
-  const baseGap = type === "narrow" ? OBSTACLE_GAP_NARROW : OBSTACLE_GAP_DEFAULT;
+  // Laser pillars are taller because they hold TWO openings split by the
+  // middle bar — each opening needs to be flyable on its own.
+  const baseGap =
+    type === "laser" ? OBSTACLE_GAP_DEFAULT + LASER_BAR_HEIGHT + 30 :
+    type === "narrow" ? OBSTACLE_GAP_NARROW :
+    OBSTACLE_GAP_DEFAULT;
   const gap = baseGap + gapBonus;
   // Saws spawn clearly on one side (top or bottom) so the pole never flips
   let sawY = 0;
@@ -100,37 +105,94 @@ export function clamp(v: number, lo: number, hi: number) {
 
 // Laser gate phase → visual/collision state. The cycle alternates between
 // "off" (whole corridor safe), a brief charge telegraphing which half is
-// about to fire, and a half-on state where only THAT half of the corridor is
-// deadly. The opposite half stays open the whole time, so there's always at
-// least one safe passage — including two full-off windows per cycle.
+// Laser gate now has TWO openings (upper + lower) separated by a middle bar.
+// The beam alternates between blocking the upper opening and the lower one.
+// See LASER_CYCLE in constants.ts for cycle layout.
 export type LaserPhase =
   | "off"
-  | "charge_top"   // top emitter telegraphing — beam will fire downward
-  | "top_on"       // top half of the gap is deadly; bottom half is safe
-  | "charge_bot"
-  | "bot_on";
+  | "charge_upper"   // upper-opening telegraph; not deadly yet
+  | "burst_upper"    // upper opening DEADLY + super-bright flash
+  | "thin_upper"     // upper opening DEADLY + thin steady beam
+  | "charge_lower"
+  | "burst_lower"
+  | "thin_lower";
 
-export function laserState(movePhase: number): LaserPhase {
+// Cycle layout — keep these aligned with the comment in constants.ts.
+const PHASE_BOUNDARIES = {
+  charge_upper: 0.06,
+  burst_upper:  0.14,
+  thin_upper:   0.22,
+  off_mid:      0.44,
+  charge_lower: 0.50,
+  burst_lower:  0.58,
+  thin_lower:   0.66,
+  off_end:      0.88,
+} as const;
+
+export function laserPhase(movePhase: number): LaserPhase {
   const c = (((movePhase % LASER_CYCLE) + LASER_CYCLE) % LASER_CYCLE) / LASER_CYCLE;
-  // 0.00–0.30  off          (full corridor safe)
-  // 0.30–0.39  charge top   (telegraph)
-  // 0.39–0.58  top on       (bottom half safe)
-  // 0.58–0.66  off          (full corridor safe — second window)
-  // 0.66–0.75  charge bot
-  // 0.75–1.00  bot on       (top half safe)
-  if (c < 0.30) return "off";
-  if (c < 0.39) return "charge_top";
-  if (c < 0.58) return "top_on";
-  if (c < 0.66) return "off";
-  if (c < 0.75) return "charge_bot";
-  return "bot_on";
+  if (c < PHASE_BOUNDARIES.charge_upper) return "off";
+  if (c < PHASE_BOUNDARIES.burst_upper)  return "charge_upper";
+  if (c < PHASE_BOUNDARIES.thin_upper)   return "burst_upper";
+  if (c < PHASE_BOUNDARIES.off_mid)      return "thin_upper";
+  if (c < PHASE_BOUNDARIES.charge_lower) return "off";
+  if (c < PHASE_BOUNDARIES.burst_lower)  return "charge_lower";
+  if (c < PHASE_BOUNDARIES.thin_lower)   return "burst_lower";
+  if (c < PHASE_BOUNDARIES.off_end)      return "thin_lower";
+  return "off";
 }
 
-// Beam reach as a fraction of the gap height. 0.55 means each beam extends
-// 55% into the gap, leaving a ~45% safe band on the OPPOSITE side. Slight
-// overlap is intentional — keeps the visual confident — but the collision
-// math gives the player the full safe half (see index.tsx).
-export const LASER_BEAM_REACH = 0.55;
+// Returns 0..1 progress within the current phase. Used by drawing for burst
+// fade-out and charge-pulse animation.
+export function laserPhaseProgress(movePhase: number): number {
+  const c = (((movePhase % LASER_CYCLE) + LASER_CYCLE) % LASER_CYCLE) / LASER_CYCLE;
+  const lo = (() => {
+    if (c < PHASE_BOUNDARIES.charge_upper) return 0;
+    if (c < PHASE_BOUNDARIES.burst_upper)  return PHASE_BOUNDARIES.charge_upper;
+    if (c < PHASE_BOUNDARIES.thin_upper)   return PHASE_BOUNDARIES.burst_upper;
+    if (c < PHASE_BOUNDARIES.off_mid)      return PHASE_BOUNDARIES.thin_upper;
+    if (c < PHASE_BOUNDARIES.charge_lower) return PHASE_BOUNDARIES.off_mid;
+    if (c < PHASE_BOUNDARIES.burst_lower)  return PHASE_BOUNDARIES.charge_lower;
+    if (c < PHASE_BOUNDARIES.thin_lower)   return PHASE_BOUNDARIES.burst_lower;
+    if (c < PHASE_BOUNDARIES.off_end)      return PHASE_BOUNDARIES.thin_lower;
+    return PHASE_BOUNDARIES.off_end;
+  })();
+  const hi = (() => {
+    if (c < PHASE_BOUNDARIES.charge_upper) return PHASE_BOUNDARIES.charge_upper;
+    if (c < PHASE_BOUNDARIES.burst_upper)  return PHASE_BOUNDARIES.burst_upper;
+    if (c < PHASE_BOUNDARIES.thin_upper)   return PHASE_BOUNDARIES.thin_upper;
+    if (c < PHASE_BOUNDARIES.off_mid)      return PHASE_BOUNDARIES.off_mid;
+    if (c < PHASE_BOUNDARIES.charge_lower) return PHASE_BOUNDARIES.charge_lower;
+    if (c < PHASE_BOUNDARIES.burst_lower)  return PHASE_BOUNDARIES.burst_lower;
+    if (c < PHASE_BOUNDARIES.thin_lower)   return PHASE_BOUNDARIES.thin_lower;
+    if (c < PHASE_BOUNDARIES.off_end)      return PHASE_BOUNDARIES.off_end;
+    return 1.0;
+  })();
+  return hi === lo ? 0 : (c - lo) / (hi - lo);
+}
+
+// Which opening (if any) is currently deadly. Charge states are NOT deadly —
+// they're telegraph windows so the player can swap openings safely.
+export function laserDeadlyOpening(phase: LaserPhase): "upper" | "lower" | null {
+  if (phase === "burst_upper" || phase === "thin_upper") return "upper";
+  if (phase === "burst_lower" || phase === "thin_lower") return "lower";
+  return null;
+}
+
+// Geometry of the two-opening laser pillar derived from the obstacle's gapY
+// (centre of the structure) and gap (total span of both openings + bar).
+export function laserGeometry(gapY: number, gap: number) {
+  const halfGap = gap / 2;
+  const halfBar = LASER_BAR_HEIGHT / 2;
+  return {
+    topEdge:  gapY - halfGap,           // top of upper opening
+    midTop:   gapY - halfBar,           // bottom of upper opening / top of middle bar
+    midBot:   gapY + halfBar,           // bottom of middle bar / top of lower opening
+    botEdge:  gapY + halfGap,           // bottom of lower opening
+    barTop:   gapY - halfBar,
+    barBot:   gapY + halfBar,
+  };
+}
 
 // ===== Space flyer factories =====
 export function makeAsteroid(): Asteroid {

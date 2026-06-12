@@ -62,10 +62,20 @@ export const COIN_PATCH_SPACING = 30;    // px between coins in the grid
 export const COIN_PATCH_OFFSET = 150;    // x past the pillar where the grid sits
 
 // ===== Laser gate (Neon biome) =====
-// Cycle measured in frames. The cycle alternates between off-windows and
-// half-firing states (top OR bottom only) so there's always a safe half to
-// fly through; see laserState() in helpers.ts.
-export const LASER_CYCLE = 140;
+// Cycle measured in frames. Phases (as a fraction of the cycle):
+//   0.00–0.06  off (both openings safe)
+//   0.06–0.14  charge upper (telegraph, NOT deadly yet)
+//   0.14–0.22  BURST upper (deadly + super bright)
+//   0.22–0.44  thin upper (deadly + thin steady beam)
+//   0.44–0.50  off (brief breather, both safe)
+//   0.50–0.58  charge lower
+//   0.58–0.66  BURST lower
+//   0.66–0.88  thin lower
+//   0.88–1.00  off (both safe)
+// See laserPhase() in helpers.ts.
+export const LASER_CYCLE = 200;
+export const LASER_BAR_HEIGHT = 50;   // height of the middle bar between openings
+export const LASER_SPACING_BONUS = 100; // extra X-spacing before/after laser pillars
 
 // ===== Space biome =====
 // On entering space, all pillars clear for this long (open void), then
@@ -102,7 +112,15 @@ export const COMBO_MULTIPLIER_THRESHOLDS = [3, 6, 10]; // x2 at 3 gems, x3 at 6,
 
 // ===== Lives (Easy mode) =====
 export const EASY_LIVES = 3;
+// Hard cap on lives even after collecting heart pickups (easy only).
+export const MAX_LIVES_EASY = 5;
 export const INVULN_AFTER_HIT_MS = 2000;
+
+// ===== Heart pickup (Volcano biome, easy mode only) =====
+// Per pillar-recycle roll. ~3% × ~70 recycles through the volcano biome
+// averages to ~2 hearts per run, matching the spec.
+export const HEART_SPAWN_CHANCE_VOLCANO = 0.03;
+export const HEART_OVERFLOW_POINTS = 100; // score given if lives are already at cap
 
 // ===== High-score keys =====
 export const HIGHSCORE_KEY: Record<Difficulty, string> = {

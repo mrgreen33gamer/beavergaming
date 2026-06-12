@@ -6,7 +6,7 @@ import {
   WIDTH, HEIGHT, OBSTACLE_WIDTH, PICKUP_SIZE, HELI_W, HELI_H,
   TILT_FACTOR, TILT_MAX,
 } from "./constants";
-import { clamp, laserState, LASER_BEAM_REACH } from "./helpers";
+import { clamp, laserPhase, laserPhaseProgress, laserGeometry } from "./helpers";
 
 // ===== Background / sky =====
 export function drawBackground(ctx: CanvasRenderingContext2D, biome: Biome, frame = 0) {
@@ -297,76 +297,100 @@ function drawSawblade(ctx: CanvasRenderingContext2D, o: Obstacle) {
   ctx.restore();
 }
 
-// Neon laser gate: pillars with emitter nodes on both inner caps. The cycle
-// alternates between OFF, CHARGE_TOP → TOP_ON (only the top half is deadly)
-// and CHARGE_BOT → BOT_ON (only the bottom half is deadly). The OPPOSITE
-// half is always safe to fly through, so there's always an opening.
+// Neon laser gate — TWO openings split by a middle bar. The beam alternates
+// between blocking the upper opening and blocking the lower one. Each fires
+// in three stages: charge (telegraph) → BURST (super-bright flash) → thin
+// steady beam. Eye indicators on the middle bar tell you which opening is
+// about to fire.
 function drawLaserGate(ctx: CanvasRenderingContext2D, o: Obstacle, biome: Biome) {
-  const halfGap = o.gap / 2;
-  const topEdge = o.gapY - halfGap;
-  const botEdge = o.gapY + halfGap;
+  const geo = laserGeometry(o.gapY, o.gap);
   const cx = o.x + OBSTACLE_WIDTH / 2;
-  const state = laserState(o.movePhase);
+  const phase = laserPhase(o.movePhase);
+  const progress = laserPhaseProgress(o.movePhase);
 
-  // Pillar bodies (neon-tinted)
+  // Pillar bodies: top, middle bar, bottom — all solid.
   const grad = ctx.createLinearGradient(o.x, 0, o.x + OBSTACLE_WIDTH, 0);
   grad.addColorStop(0, biome.pillarMain[0]);
   grad.addColorStop(0.5, biome.pillarMain[1]);
   grad.addColorStop(1, biome.pillarMain[2]);
   ctx.fillStyle = grad;
-  ctx.fillRect(o.x, 0, OBSTACLE_WIDTH, topEdge);
-  ctx.fillRect(o.x, botEdge, OBSTACLE_WIDTH, HEIGHT - botEdge);
+  ctx.fillRect(o.x, 0, OBSTACLE_WIDTH, geo.topEdge);
+  ctx.fillRect(o.x, geo.barTop, OBSTACLE_WIDTH, geo.barBot - geo.barTop);
+  ctx.fillRect(o.x, geo.botEdge, OBSTACLE_WIDTH, HEIGHT - geo.botEdge);
 
-  // Emitter housings on the inner faces
+  // Emitter housings on the inside edges (top opening edges + bar edges + bottom opening edges)
   ctx.fillStyle = "#1a0830";
-  ctx.fillRect(o.x, topEdge - 10, OBSTACLE_WIDTH, 10);
-  ctx.fillRect(o.x, botEdge, OBSTACLE_WIDTH, 10);
+  ctx.fillRect(o.x, geo.topEdge - 8, OBSTACLE_WIDTH, 8);   // top of upper opening
+  ctx.fillRect(o.x, geo.midTop - 4, OBSTACLE_WIDTH, 4);    // bottom of upper opening
+  ctx.fillRect(o.x, geo.midBot,     OBSTACLE_WIDTH, 4);    // top of lower opening
+  ctx.fillRect(o.x, geo.botEdge,    OBSTACLE_WIDTH, 8);    // bottom of lower opening
 
-  // Which emitters are doing what right now
-  const topActive = state === "top_on";
-  const botActive = state === "bot_on";
-  const topCharging = state === "charge_top";
-  const botCharging = state === "charge_bot";
+  // === Eye indicators on the middle bar ===
+  // A pair of "eyes" facing each opening; pupils swivel toward the side that's
+  // about to fire or currently firing.
+  const eyeY = (geo.barTop + geo.barBot) / 2;
+  const upperWatch = phase === "charge_upper" || phase === "burst_upper" || phase === "thin_upper";
+  const lowerWatch = phase === "charge_lower" || phase === "burst_lower" || phase === "thin_lower";
+  const upperFiring = phase === "burst_upper" || phase === "thin_upper";
+  const lowerFiring = phase === "burst_lower" || phase === "thin_lower";
+  // The pupils look in the direction of the active opening, idle = level.
+  const lookDir = upperWatch ? -1 : lowerWatch ? 1 : 0;
+  const eyeIsAngry = upperFiring || lowerFiring;
+  drawEyePair(ctx, cx, eyeY, lookDir, eyeIsAngry, phase, progress);
 
-  // Emitter glow dots — colour signals the state of each individual emitter
-  const dotColor = (active: boolean, charging: boolean) =>
-    active ? "#ff3060" : charging ? "#ffd060" : "#e060ff";
-  ctx.fillStyle = dotColor(topActive, topCharging);
-  ctx.beginPath(); ctx.arc(cx, topEdge - 5, 5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = dotColor(botActive, botCharging);
-  ctx.beginPath(); ctx.arc(cx, botEdge + 5, 5, 0, Math.PI * 2); ctx.fill();
-
-  // Beam endpoints — each beam reaches LASER_BEAM_REACH into the gap
-  const gapHeight = botEdge - topEdge;
-  const topBeamEnd = topEdge + gapHeight * LASER_BEAM_REACH;
-  const botBeamEnd = botEdge - gapHeight * LASER_BEAM_REACH;
-
-  // Charging telegraph — thin flickering dashed pilot beam from one emitter
-  if (topCharging) {
-    drawChargeLine(ctx, cx, topEdge, topBeamEnd);
-  }
-  if (botCharging) {
-    drawChargeLine(ctx, cx, botEdge, botBeamEnd);
-  }
-
-  // Active beam — half-corridor from the firing emitter
-  if (topActive) {
-    drawBeam(ctx, o.x, cx, topEdge, topBeamEnd);
-  }
-  if (botActive) {
-    drawBeam(ctx, o.x, cx, botEdge, botBeamEnd);
-  }
+  // === Beams ===
+  if (phase === "charge_upper") drawChargePulse(ctx, cx, geo.topEdge, geo.midTop, progress);
+  if (phase === "charge_lower") drawChargePulse(ctx, cx, geo.midBot,  geo.botEdge, progress);
+  if (phase === "burst_upper")  drawBurstBeam(ctx, o.x, cx, geo.topEdge, geo.midTop, progress);
+  if (phase === "burst_lower")  drawBurstBeam(ctx, o.x, cx, geo.midBot,  geo.botEdge, progress);
+  if (phase === "thin_upper")   drawThinBeam (ctx, o.x, cx, geo.topEdge, geo.midTop);
+  if (phase === "thin_lower")   drawThinBeam (ctx, o.x, cx, geo.midBot,  geo.botEdge);
 }
 
-function drawChargeLine(
+// Draw two side-by-side eyes (like 👀) on the middle bar. lookDir: -1 looks
+// up, +1 looks down, 0 looks straight ahead (idle).
+function drawEyePair(
   ctx: CanvasRenderingContext2D,
-  cx: number, y1: number, y2: number
+  cx: number, cy: number, lookDir: number, angry: boolean,
+  phase: ReturnType<typeof laserPhase>, progress: number
 ) {
+  const eyeR = 5;
+  const eyeSep = 7;
+  const drawOne = (x: number) => {
+    // Sclera (white). When firing it goes red+bright.
+    ctx.fillStyle = angry ? "#ffe0e0" : "#fff5e0";
+    ctx.beginPath(); ctx.arc(x, cy, eyeR, 0, Math.PI * 2); ctx.fill();
+    // Charge phase pulses the iris glow to telegraph.
+    if (phase === "charge_upper" || phase === "charge_lower") {
+      ctx.fillStyle = `rgba(255,210,80,${0.4 + 0.4 * Math.sin(progress * Math.PI * 6)})`;
+      ctx.beginPath(); ctx.arc(x, cy, eyeR + 2, 0, Math.PI * 2); ctx.fill();
+    }
+    // Pupil
+    const pupilOffset = lookDir * 2;
+    ctx.fillStyle = angry ? "#ff1030" : "#0a0418";
+    ctx.beginPath();
+    ctx.arc(x, cy + pupilOffset, angry ? 3 : 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Highlight glint
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath();
+    ctx.arc(x - 1, cy + pupilOffset - 1, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  drawOne(cx - eyeSep);
+  drawOne(cx + eyeSep);
+}
+
+function drawChargePulse(
+  ctx: CanvasRenderingContext2D,
+  cx: number, y1: number, y2: number, progress: number
+) {
+  // Build-up: thin dashed line that intensifies as charge progresses.
   ctx.save();
-  ctx.globalAlpha = 0.35 + Math.random() * 0.3;
+  ctx.globalAlpha = 0.35 + 0.45 * progress + Math.random() * 0.2;
   ctx.strokeStyle = "#ffd060";
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1.5 + progress * 2;
+  ctx.setLineDash([3, 3]);
   ctx.beginPath();
   ctx.moveTo(cx, y1);
   ctx.lineTo(cx, y2);
@@ -375,44 +399,90 @@ function drawChargeLine(
   ctx.restore();
 }
 
-function drawBeam(
+// BURST: super-bright wide flash filling the entire opening. Intensity
+// fades out as the burst transitions into the thin steady state.
+function drawBurstBeam(
+  ctx: CanvasRenderingContext2D,
+  oxLeft: number, cx: number, y1: number, y2: number, progress: number
+) {
+  // progress 0..1 across the burst phase. Fade the burst as it ends so the
+  // transition into thin reads smoothly.
+  const intensity = 1 - progress * 0.4;
+
+  ctx.save();
+  // Soft outer halo extending beyond the opening
+  const halo = ctx.createRadialGradient(cx, (y1 + y2) / 2, 0, cx, (y1 + y2) / 2, OBSTACLE_WIDTH * 2.5);
+  halo.addColorStop(0, `rgba(255,180,200,${0.55 * intensity})`);
+  halo.addColorStop(1, "rgba(255,80,120,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(oxLeft - OBSTACLE_WIDTH, y1, OBSTACLE_WIDTH * 3, y2 - y1);
+
+  // Vertical bloom along the corridor width
+  const bloom = ctx.createLinearGradient(oxLeft, 0, oxLeft + OBSTACLE_WIDTH, 0);
+  bloom.addColorStop(0,    "rgba(255,80,120,0)");
+  bloom.addColorStop(0.5,  `rgba(255,200,220,${0.95 * intensity})`);
+  bloom.addColorStop(1,    "rgba(255,80,120,0)");
+  ctx.fillStyle = bloom;
+  ctx.fillRect(oxLeft, y1, OBSTACLE_WIDTH, y2 - y1);
+
+  // Solid hot core — fat at burst, narrows as intensity fades
+  ctx.shadowColor = "#ff3060";
+  ctx.shadowBlur = 20 * intensity;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 6 + 8 * intensity;
+  ctx.beginPath();
+  ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = `rgba(255,90,120,${intensity})`;
+  ctx.lineWidth = 14 + 12 * intensity;
+  ctx.beginPath();
+  ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
+  ctx.stroke();
+
+  // Endpoint flares — punctuates the cutoff
+  ctx.fillStyle = `rgba(255,255,255,${intensity})`;
+  ctx.beginPath(); ctx.arc(cx, y1, 6 + 4 * intensity, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, y2, 6 + 4 * intensity, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+// THIN steady beam — the long deadly state. Calmer than the burst but still
+// unmistakably lethal.
+function drawThinBeam(
   ctx: CanvasRenderingContext2D,
   oxLeft: number, cx: number, y1: number, y2: number
 ) {
   ctx.save();
-  // Outer bloom — a soft horizontal gradient over the corridor width
-  const beamGrad = ctx.createLinearGradient(oxLeft, 0, oxLeft + OBSTACLE_WIDTH, 0);
-  beamGrad.addColorStop(0, "rgba(255,48,96,0)");
-  beamGrad.addColorStop(0.5, "rgba(255,80,120,0.55)");
-  beamGrad.addColorStop(1, "rgba(255,48,96,0)");
-  ctx.fillStyle = beamGrad;
-  const yMin = Math.min(y1, y2);
-  const yMax = Math.max(y1, y2);
-  ctx.fillRect(oxLeft, yMin, OBSTACLE_WIDTH, yMax - yMin);
+  // Subtle bloom
+  const bloom = ctx.createLinearGradient(oxLeft, 0, oxLeft + OBSTACLE_WIDTH, 0);
+  bloom.addColorStop(0,   "rgba(255,48,96,0)");
+  bloom.addColorStop(0.5, "rgba(255,90,130,0.45)");
+  bloom.addColorStop(1,   "rgba(255,48,96,0)");
+  ctx.fillStyle = bloom;
+  ctx.fillRect(oxLeft, y1, OBSTACLE_WIDTH, y2 - y1);
 
-  // Hot white core with red bloom shadow
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 4;
+  // White core
   ctx.shadowColor = "#ff3060";
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(cx, y1);
-  ctx.lineTo(cx, y2);
+  ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
   ctx.stroke();
-  // Soft red over-layer
-  ctx.strokeStyle = "#ff6080";
-  ctx.lineWidth = 8;
-  ctx.globalAlpha = 0.5;
+  ctx.shadowBlur = 0;
+  // Red overlay
+  ctx.strokeStyle = "rgba(255,90,130,0.7)";
+  ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.moveTo(cx, y1);
-  ctx.lineTo(cx, y2);
+  ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
   ctx.stroke();
-  // Bright tip where the beam ends so the cutoff reads clearly
-  ctx.globalAlpha = 0.85;
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.arc(cx, y2, 5, 0, Math.PI * 2);
-  ctx.fill();
+
+  // Endpoint glints
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.beginPath(); ctx.arc(cx, y1, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, y2, 3.5, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 export function drawPickup(
@@ -429,6 +499,7 @@ export function drawPickup(
   else if (p.type === "red_gem") drawRedGem(ctx, x, y, p.spin, frame);
   else if (p.type === "gold_gem") drawGoldGem(ctx, x, y, p.spin, frame);
   else if (p.type === "coin") drawCoin(ctx, x, y, p.spin, frame);
+  else if (p.type === "heart") drawHeartPickup(ctx, x, y, frame);
   else if (p.type === "shield") drawShieldPickup(ctx, x, y, frame);
   else if (p.type === "slowmo") drawSlowmoPickup(ctx, x, y, frame);
   else if (p.type === "magnet") drawMagnetPickup(ctx, x, y, frame);
@@ -476,6 +547,46 @@ function drawCoin(
     ctx.arc(x - w * 0.2, y - R * 0.2, 1.6, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+// Heart pickup — extra life. Pulses on a slow heartbeat so it reads as alive.
+function drawHeartPickup(
+  ctx: CanvasRenderingContext2D, x: number, y: number, frame: number
+) {
+  const beat = 0.92 + 0.08 * Math.sin(frame * 0.18);
+  const R = PICKUP_SIZE * 0.85 * beat;
+
+  // Soft red halo
+  const halo = ctx.createRadialGradient(x, y, 1, x, y, R + 8);
+  halo.addColorStop(0, "rgba(255,80,100,0.55)");
+  halo.addColorStop(1, "rgba(255,80,100,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(x - R - 8, y - R - 8, (R + 8) * 2, (R + 8) * 2);
+
+  // Heart shape — two lobes + triangle point
+  const path = (scale: number, fill: string) => {
+    const w = R * scale;
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(x - w * 0.5, y - w * 0.15, w * 0.55, 0, Math.PI * 2);
+    ctx.arc(x + w * 0.5, y - w * 0.15, w * 0.55, 0, Math.PI * 2);
+    ctx.moveTo(x - w * 1.0, y + w * 0.1);
+    ctx.lineTo(x, y + w * 1.05);
+    ctx.lineTo(x + w * 1.0, y + w * 0.1);
+    ctx.closePath();
+    ctx.fill();
+  };
+  // Dark outline
+  path(1.05, "#7a1020");
+  // Main red
+  path(1.0,  "#e8324a");
+  // Lighter top
+  path(0.78, "#ff6b6b");
+  // Sparkle highlight
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.beginPath();
+  ctx.ellipse(x - R * 0.35, y - R * 0.35, R * 0.18, R * 0.10, -0.5, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawGem(
