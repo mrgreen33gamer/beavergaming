@@ -1935,7 +1935,43 @@ export const gameLoaders: Record<string, Loader> = {
 Run: `npm test -- gameRegistry`
 Expected: PASS, 3 tests. If "has a loader for every registered game" fails, the printed list names the missing slugs.
 
-- [ ] **Step 5: Write GameFrame**
+- [ ] **Step 5: Write the failing GameFrame test**
+
+Create `app/play/[slug]/__tests__/GameFrame.test.tsx`:
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import GameFrame from "@/app/play/[slug]/GameFrame";
+
+// Canvas games are safe to render here: all 28 guard `if (!ctx) return`,
+// so the game mounts and its draw effect bails out under jsdom.
+describe("GameFrame", () => {
+  it("shows the loading screen while the chunk resolves", () => {
+    render(<GameFrame slug="pong" title="Pong" accent="#ff6b1a" />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("PONG")).toBeInTheDocument();
+  });
+
+  it("wraps the game in the shared shell chrome", () => {
+    render(<GameFrame slug="pong" title="Pong" accent="#ff6b1a" />);
+    expect(screen.getByRole("button", { name: /pause/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /fullscreen/i })).toBeInTheDocument();
+  });
+
+  it("renders the loaded game once its chunk resolves", async () => {
+    render(<GameFrame slug="pong" title="Pong" accent="#ff6b1a" />);
+    expect(await screen.findByRole("button", { name: "START" })).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 6: Run test to verify it fails**
+
+Run: `npm test -- GameFrame`
+Expected: FAIL — cannot resolve `@/app/play/[slug]/GameFrame`.
+
+- [ ] **Step 7: Write GameFrame**
 
 Create `app/play/[slug]/GameFrame.tsx`:
 
@@ -1978,7 +2014,12 @@ export default function GameFrame({
 }
 ```
 
-- [ ] **Step 6: Rewrite the play page**
+- [ ] **Step 8: Run the GameFrame test to verify it passes**
+
+Run: `npm test -- GameFrame`
+Expected: PASS, 3 tests.
+
+- [ ] **Step 9: Rewrite the play page**
 
 Replace `app/play/[slug]/page.tsx` lines 1-95 (all 43 imports plus the `gameComponents` map) so the file begins:
 
@@ -2017,7 +2058,7 @@ And replace the render site at the former `<GameComponent />` (inside the canvas
 
 Leave the header, description, and "MORE GAMES" sections unchanged.
 
-- [ ] **Step 7: Verify the build and bundle win**
+- [ ] **Step 10: Verify the build and bundle win**
 
 ```bash
 npm run build
@@ -2025,7 +2066,7 @@ npm run build
 
 Expected: build succeeds; all 43 static params prerender. In the route summary, `/play/[slug]` First Load JS should drop substantially versus before — record both numbers in the commit message.
 
-- [ ] **Step 8: Verify games still run**
+- [ ] **Step 11: Verify games still run**
 
 ```bash
 npm run dev
@@ -2033,7 +2074,7 @@ npm run dev
 
 Open `http://localhost:3000/play/asteroids`, `/play/lights-out`, and `/play/pong`. Confirm each shows the loading screen briefly, then the game, with working Pause and Fullscreen buttons.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add app/play lib
@@ -2266,6 +2307,15 @@ describe("Pong platform migration", () => {
     expect(screen.getByRole("button", { name: "START" })).toBeInTheDocument();
   });
 
+  // RED-FIRST: fails before the migration, because an unmigrated Pong never
+  // calls useCartridge and so never establishes a player identity.
+  // Driving a real canvas match to a win in jsdom is impractical, so this
+  // asserts the platform wiring exists rather than the win path itself.
+  it("is wired to the platform on mount", async () => {
+    render(<Pong />);
+    await waitFor(() => expect(localStorage.getItem("bg:playerId")).not.toBeNull());
+  });
+
   it("does not write legacy localStorage keys", () => {
     render(<Pong />);
     const stray = Object.keys(localStorage).filter(
@@ -2276,10 +2326,16 @@ describe("Pong platform migration", () => {
 });
 ```
 
+Update the import line at the top of the file to include `waitFor`:
+
+```tsx
+import { render, screen, waitFor } from "@testing-library/react";
+```
+
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npm test -- pong`
-Expected: PASS. Pong writes no localStorage today, so both assertions already hold — this test is a regression guard proving the migration in Step 3 introduces no stray keys.
+Expected: FAIL on "is wired to the platform on mount" — unmigrated Pong never calls `useCartridge`, so no `bg:playerId` is written. The other two assertions pass already and act as regression guards.
 
 - [ ] **Step 3: Wire in the hook**
 
