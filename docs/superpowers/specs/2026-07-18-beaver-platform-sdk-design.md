@@ -9,12 +9,12 @@ context only — each gets its own spec when reached.
 
 ## 1. Problem
 
-`beavergaming` is a Next.js portal with 42 working HTML5-canvas games
+`beavergaming` is a Next.js portal with 43 working HTML5-canvas games
 (~23,000 LOC). The games work, but they share nothing:
 
 | Concern | Current state |
 |---|---|
-| High scores | 41 of 42 games hand-roll their own `localStorage` logic |
+| High scores | 41 of 43 games hand-roll their own `localStorage` logic |
 | Game loop | 29 separate `requestAnimationFrame` implementations |
 | Pause | 4 games |
 | Fullscreen | 2 games |
@@ -23,7 +23,7 @@ context only — each gets its own spec when reached.
 | Accounts / persistence | none — fully static site, no backend |
 
 There is also a live performance defect: `app/play/[slug]/page.tsx` statically
-imports all 42 games, so **every visitor downloads all 42 games' code to play
+imports all 43 games, so **every visitor downloads all 43 games' code to play
 one**.
 
 The goal is a shared platform layer that unifies the existing games, supports
@@ -36,7 +36,7 @@ creators — all under one currency.
   500–1,000 hours and would land behind where Godot starts today, for free.
   Ownership comes from the platform layer and (optionally) Godot's GDExtension
   C++ modules, not from writing a renderer.
-- **Not rewriting the 42 canvas games.** They stay canvas/React permanently.
+- **Not rewriting the 43 canvas games.** They stay canvas/React permanently.
 - **Not real-money purchases.** B-Tokens are earned only. This deliberately
   avoids payments, fraud, COPPA, and loot-box regulation.
 - **Not multiplayer in Phase 1.**
@@ -50,7 +50,7 @@ they're built in.
 ```
 ┌─ PORTAL (Next.js)      loading screen · pause menu · profile · shop
 ├─ SDK (lib/platform/)   cartridge contract · storage · economy · audio
-└─ CARTRIDGES            42 canvas games   │   Godot web exports
+└─ CARTRIDGES            43 canvas games   │   Godot web exports
 ```
 
 Canvas cartridges call the SDK directly. Godot cartridges call it over
@@ -228,15 +228,15 @@ game: host.reportScore(4200)
 ```
 
 Games never touch storage or the ledger directly. That indirection is the whole
-point: it is what lets Phase 2 swap the backend without reopening 42 games.
+point: it is what lets Phase 2 swap the backend without reopening 43 games.
 
 ## 6. Migration strategy
 
 Incremental, with no flag day.
 
-1. **`GameShell` wraps all 42 games immediately.** They get the loading screen,
+1. **`GameShell` wraps all 43 games immediately.** They get the loading screen,
    pause overlay, and fullscreen with **zero changes to game code**.
-2. **Code-split** `app/play/[slug]/page.tsx` using `next/dynamic`, replacing 42
+2. **Code-split** `app/play/[slug]/page.tsx` using `next/dynamic`, replacing 43
    static imports. Large immediate load-time win.
 3. **Games adopt `reportScore` one at a time**, at any pace. A game that hasn't
    migrated keeps its own `localStorage` high score and simply earns no tokens
@@ -279,7 +279,7 @@ it is where projects die, and it should land on a foundation that already works.
 
 ## 10. Phase 1 acceptance criteria
 
-- [ ] All 42 games render inside `GameShell` with loading screen, pause, fullscreen
+- [ ] All 43 games render inside `GameShell` with loading screen, pause, fullscreen
 - [ ] `app/play/[slug]/page.tsx` lazy-loads a single game; bundle measured before/after
 - [ ] `CartridgeHost` exposes no token-minting surface; enforced by test
 - [ ] Ledger is append-only; balance derives from entries
