@@ -121,7 +121,7 @@ describe("earn rate catalogue", () => {
       frogger: 5000,
       tetris: 5000,
       "2048": 6000,
-      "lunar-lander": 10000,
+      "lunar-lander": 6800,
     };
 
     for (const [slug, points] of Object.entries(runs)) {

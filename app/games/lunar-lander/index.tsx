@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useCartridge } from "@/lib/platform/useCartridge";
+import { fuelBonusFor, padBonusFor } from "./scoring";
 
 const WIDTH = 600;
 const HEIGHT = 460;
@@ -319,6 +320,10 @@ export default function LunarLander() {
                 if (goodLanding) {
                   st.running = false;
                   st.landingFlash = 24;
+                  // Captured before the lander is snapped to rest below. The pad
+                  // bonus rewards a gentle touchdown, and reading velocity after
+                  // zeroing it scored every landing as if it were perfect.
+                  const touchdownSpeed = Math.hypot(st.vx, st.vy);
                   // Snap lander to pad surface
                   st.y = ty - 10;
                   st.vx = 0; st.vy = 0;
@@ -328,9 +333,8 @@ export default function LunarLander() {
                     const sp = 0.6 + Math.random() * 1.6;
                     st.dust.push({ x: st.x, y: ty, vx: Math.cos(a2) * sp, vy: Math.sin(a2) * sp, life: 30, maxLife: 30, color: "#d8c8a8", size: 1.5 });
                   }
-                  const speed = Math.hypot(st.vx, st.vy);
-                  const fuelBonus = Math.floor(st.fuel * 0.5);
-                  const padBonus = Math.floor(100 * seg.mult * (1 + (10 - Math.min(10, speed * 5))));
+                  const fuelBonus = fuelBonusFor(st.fuel);
+                  const padBonus = padBonusFor(seg.mult, touchdownSpeed);
                   const total = padBonus + fuelBonus;
                   st.score += total;
                   setScore(st.score);

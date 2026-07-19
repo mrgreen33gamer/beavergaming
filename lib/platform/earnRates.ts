@@ -73,11 +73,10 @@ export const GAME_RATES: Record<string, Partial<EarnRate>> = {
   asteroids: { tokensPerPoint: 0.002 },      // inflated scale
 
   // --- score ~10,000 --------------------------------------------------
-  "lunar-lander": { tokensPerPoint: 0.003 }, // ~10,000/run
-  // NOTE: lunar-lander's landing bonus reads velocity after it has been
-  // zeroed, so every landing scores the maximum pad bonus regardless of how
-  // gently it touches down. This rate is tuned to that behaviour. Fixing the
-  // bug would roughly halve real scores and this rate should double with it.
+  // Was 0.003 when every landing silently scored the maximum pad bonus. That
+  // bug is fixed, so a competent landing now scores ~6,800 rather than
+  // ~10,000 and the rate rises to keep the payout at target.
+  "lunar-lander": { tokensPerPoint: 0.0045 }, // ~6,800/run
 
   /**
    * Event-paid games. These report a score so it can be tracked as a high
