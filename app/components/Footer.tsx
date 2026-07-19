@@ -8,7 +8,7 @@ export default function Footer() {
               <span className="text-[var(--accent)]">&gt;</span> Beaver Gaming v0.1
             </p>
             <p className="t-caption mt-1">
-              Hand-built portal in the spirit of the early 2000s.
+              A games portal in the spirit of the early 2000s.
             </p>
           </div>
           <div className="t-caption sm:text-right">

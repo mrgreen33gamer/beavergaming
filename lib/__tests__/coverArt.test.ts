@@ -16,20 +16,36 @@ describe("cover art generation", () => {
 
   it("assigns a known pattern to every real game", () => {
     for (const g of games) {
-      expect(COVER_PATTERNS).toContain(patternFor(g.slug));
+      expect(COVER_PATTERNS).toContain(patternFor(g.slug, g.category));
     }
+  });
+
+  it("gives every shipped game an explicit, hand-chosen pattern", () => {
+    // Guards against a new game silently falling through to the genre
+    // default or the hash, which is what made covers look arbitrary before.
+    const unassigned = games.filter(
+      (g) => patternFor(g.slug) !== patternFor(g.slug, g.category),
+    );
+    expect(unassigned.map((g) => g.slug)).toEqual([]);
   });
 
   it("spreads games across patterns rather than piling onto one", () => {
     const counts = new Map<string, number>();
     for (const g of games) {
-      const p = patternFor(g.slug);
+      const p = patternFor(g.slug, g.category);
       counts.set(p, (counts.get(p) ?? 0) + 1);
     }
-    // With 43 games over 8 patterns, a healthy spread uses most of them and
-    // no single pattern dominates the library.
     expect(counts.size).toBeGreaterThanOrEqual(6);
     expect(Math.max(...counts.values())).toBeLessThan(games.length / 2);
+  });
+
+  it("matches patterns to subject matter", () => {
+    // A few anchors: the assignment should read as intentional, not random.
+    expect(patternFor("space-invaders")).toBe("stars");
+    expect(patternFor("breakout")).toBe("bricks");
+    expect(patternFor("tron")).toBe("circuit");
+    expect(patternFor("pacman")).toBe("grid");
+    expect(patternFor("pong")).toBe("scanlines");
   });
 
   it("produces non-trivial svg markup for every pattern", () => {
