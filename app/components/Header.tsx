@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { categories } from "@/lib/games";
+import TokenBalance from "./TokenBalance";
 
 export default function Header() {
   return (
@@ -16,17 +17,20 @@ export default function Header() {
             </p>
           </div>
         </Link>
-        <nav className="flex flex-wrap gap-1 font-[family-name:var(--font-mono)] text-lg">
-          {categories.map((c) => (
-            <Link
-              key={c.id}
-              href={`/?cat=${c.id}`}
-              className="px-3 py-1 rounded hover:bg-[var(--surface-2)] hover:text-[var(--accent-hot)] transition-colors"
-            >
-              {c.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex items-center gap-4">
+          <nav className="flex flex-wrap gap-1 font-[family-name:var(--font-mono)] text-lg">
+            {categories.map((c) => (
+              <Link
+                key={c.id}
+                href={`/?cat=${c.id}`}
+                className="px-3 py-1 rounded hover:bg-[var(--surface-2)] hover:text-[var(--accent-hot)] transition-colors"
+              >
+                {c.label}
+              </Link>
+            ))}
+          </nav>
+          <TokenBalance />
+        </div>
       </div>
     </header>
   );
