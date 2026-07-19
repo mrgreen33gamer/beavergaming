@@ -19,9 +19,7 @@ export const gameLoaders: Record<string, Loader> = {
   helicopter: () => import("@/app/games/helicopter/index"),
   "apple-shooter": () => import("@/app/games/apple-shooter/index"),
   snake: () => import("@/app/games/snake/index"),
-  // MemoryMatch is the one game still living as a flat file rather than a
-  // directory. Every other app/games/*.tsx is a 1-line re-export shim.
-  "memory-match": () => import("@/app/games/MemoryMatch"),
+  "memory-match": () => import("@/app/games/memory-match/index"),
   "whack-a-mole": () => import("@/app/games/whack-a-mole/index"),
   "space-invaders": () => import("@/app/games/space-invaders/index"),
   galaga: () => import("@/app/games/galaga/index"),
