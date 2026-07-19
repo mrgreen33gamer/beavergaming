@@ -14,7 +14,7 @@ import {
   MAGNET_RADIUS, MAGNET_RADIUS_SQ, MAGNET_DURATION_MS,
   SLOWMO_DURATION_MS, SLOWMO_FACTOR, SHIELD_GRACE_MS,
   BLUE_GEM_POINTS, GREEN_GEM_POINTS, RED_GEM_POINTS, GOLD_GEM_POINTS,
-  MAX_PARTICLES, SCRAPE_THRESHOLD, SCRAPE_COOLDOWN_MS,
+  MAX_PARTICLES, MAX_RAIN, UI_SYNC_FRAMES, SCRAPE_THRESHOLD, SCRAPE_COOLDOWN_MS,
   NEAR_MISS_POINTS, NEAR_MISS_COOLDOWN_MS,
   COMBO_TIMEOUT_MS,
   EASY_LIVES, EASY_GAP_BONUS, INVULN_AFTER_HIT_MS,
@@ -487,17 +487,28 @@ export default function HelicopterGame() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    // alpha:false + desynchronized = cheaper compositing / lower input latency
+    const ctx = canvas.getContext("2d", {
+      alpha: false,
+      desynchronized: true,
+    } as CanvasRenderingContext2DSettings);
     if (!ctx) return;
 
-    // Crisp rendering on high-DPI mobile screens.
-    const dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
-    canvas.width = Math.floor(WIDTH * dpr);
-    canvas.height = Math.floor(HEIGHT * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Cap DPR hard — 2× buffers (1600×800) were a major lag source on mobile.
+    // CSS scales the canvas; 1× logical pixels keeps the sim smooth.
+    const dpr = 1;
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Image smoothing off for sharper low-res pixel look + slight fillRect win
+    ctx.imageSmoothingEnabled = false;
+    void dpr;
 
     let raf = 0;
     let frame = 0;
+    let lastUiScore = -1;
+    let lastUiSlow = -1;
+    let lastUiMagnet = -1;
 
     const draw = () => {
       try {
@@ -743,7 +754,7 @@ export default function HelicopterGame() {
         }
 
         // ---- Emit smoke (respects particles setting) ----
-        if (settingsRef.current.particles && frame % 2 === 0 && s.particles.length < MAX_PARTICLES) {
+        if (settingsRef.current.particles && frame % 4 === 0 && s.smoke.length < 40 && s.particles.length < MAX_PARTICLES) {
           s.smoke.push({
             x: HELI_X - 16,
             y: s.y + 4,
@@ -769,8 +780,8 @@ export default function HelicopterGame() {
         // ---- Rain (storm biome, respects weather setting) ----
         const weatherOn = settingsRef.current.weather;
         if (currentBiome.hasRain && weatherOn) {
-          if (s.rain.length < 60) {
-            for (let i = 0; i < 3; i++) {
+          if (s.rain.length < MAX_RAIN) {
+            for (let i = 0; i < 2; i++) {
               s.rain.push({
                 x: Math.random() * (WIDTH + 80),
                 y: Math.random() * -100,
@@ -1021,11 +1032,24 @@ export default function HelicopterGame() {
             localStorage.setItem(HIGHSCORE_KEY[s.difficulty], String(finalScore));
           }
           setTimeout(() => setGameOver(true), 600);
-        } else if (frame - s.lastScoreSyncFrame >= 4) {
+        } else if (frame - s.lastScoreSyncFrame >= UI_SYNC_FRAMES) {
+          // Throttle React HUD updates — setState every few frames was causing
+          // full component re-renders on top of the canvas loop (main lag source).
           s.lastScoreSyncFrame = frame;
-          setScore(s.score);
-          setSlowmoRemaining(slowMoActive ? s.slowMoUntil - now : 0);
-          setMagnetRemaining(magnetActive ? s.magnetUntil - now : 0);
+          if (s.score !== lastUiScore) {
+            lastUiScore = s.score;
+            setScore(s.score);
+          }
+          const slowLeft = slowMoActive ? Math.ceil((s.slowMoUntil - now) / 1000) : 0;
+          const magLeft = magnetActive ? Math.ceil((s.magnetUntil - now) / 1000) : 0;
+          if (slowLeft !== lastUiSlow) {
+            lastUiSlow = slowLeft;
+            setSlowmoRemaining(slowMoActive ? s.slowMoUntil - now : 0);
+          }
+          if (magLeft !== lastUiMagnet) {
+            lastUiMagnet = magLeft;
+            setMagnetRemaining(magnetActive ? s.magnetUntil - now : 0);
+          }
         }
       }
 
@@ -1074,10 +1098,11 @@ export default function HelicopterGame() {
       drawBackground(ctx, currentBiome, frame);
       drawSun(ctx, currentBiome);
       drawStars(ctx, s.stars, currentBiome, frame);
-      if (currentBiome.id === "space") drawSpaceWarp(ctx, frame);
+      // Space warp streaks every other frame (decorative only)
+      if (currentBiome.id === "space" && (frame & 1) === 0) drawSpaceWarp(ctx, frame);
       if (currentBiome.id === "storm") drawTornado(ctx, s.tornadoX, frame, s.tornadoPhase);
       drawMountains(ctx, s.farMountains, s.nearMountains, currentBiome);
-      drawRain(ctx, s.rain);
+      if (settingsRef.current.weather) drawRain(ctx, s.rain);
 
       for (const o of s.obstacles) drawObstacle(ctx, o, currentBiome);
       for (const p of s.pickups) drawPickup(ctx, p, frame);

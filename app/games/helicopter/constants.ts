@@ -90,7 +90,12 @@ export const JET_MAX_MS = 6200;
 export const JET_BULLET_SPEED = 7.5;
 
 // ===== Perf safety =====
-export const MAX_PARTICLES = 200;
+// Lower cap: particle explosions + smoke were a major frame-time cost on mobile.
+export const MAX_PARTICLES = 90;
+// Cap rain drops (storm biome).
+export const MAX_RAIN = 36;
+// React HUD sync interval (frames). Higher = fewer re-renders = smoother canvas.
+export const UI_SYNC_FRAMES = 12;
 
 // ===== Visuals =====
 // Heli tilt: angle = clamp(vy * TILT_FACTOR, -TILT_MAX, +TILT_MAX)

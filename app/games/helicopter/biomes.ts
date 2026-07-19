@@ -14,7 +14,7 @@ export const BIOMES: Biome[] = [
     pillarMain: ["#cc5510", "#ff6b1a", "#cc5510"],
     pillarCap: "#ff8a3d",
     pillarEdge: "#7a2a05",
-    starCount: 50,
+    starCount: 24,
     starColor: "#5a3828",
     hasRain: false,
     hasLightning: false,
@@ -51,7 +51,7 @@ export const BIOMES: Biome[] = [
     pillarMain: ["#105858", "#18807a", "#105858"],
     pillarCap: "#30c0a8",
     pillarEdge: "#083838",
-    starCount: 50,       // bubbles
+    starCount: 22,       // bubbles (kept low for perf)
     starColor: "#80d8f0",
     hasRain: false,
     hasLightning: false,
@@ -87,7 +87,7 @@ export const BIOMES: Biome[] = [
     pillarMain: ["#5a2010", "#8a3818", "#5a2010"],
     pillarCap: "#d04020",
     pillarEdge: "#2a0a05",
-    starCount: 35,        // embers
+    starCount: 18,        // embers
     starColor: "#ff6030",
     hasRain: false,
     hasLightning: false,
@@ -106,7 +106,7 @@ export const BIOMES: Biome[] = [
     pillarMain: ["#4020a0", "#8040e0", "#4020a0"],
     pillarCap: "#e060ff",
     pillarEdge: "#200850",
-    starCount: 80,       // neon sparkles
+    starCount: 28,       // neon sparkles
     starColor: "#ff60e0",
     hasRain: false,
     hasLightning: false,
@@ -124,7 +124,7 @@ export const BIOMES: Biome[] = [
     pillarMain: ["#604080", "#a070c0", "#604080"],
     pillarCap: "#c090e0",
     pillarEdge: "#301850",
-    starCount: 120,
+    starCount: 36,
     starColor: "#f5e8d0",
     hasRain: false,
     hasLightning: false,

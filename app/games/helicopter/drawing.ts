@@ -8,29 +8,46 @@ import {
 } from "./constants";
 import { clamp, laserPhase, laserPhaseProgress, laserGeometry } from "./helpers";
 
+// ===== Cached sky fills (createLinearGradient every frame was a big cost) =====
+const skyCache = new Map<string, CanvasGradient>();
+let skyCacheCtx: CanvasRenderingContext2D | null = null;
+
+function skyGradient(ctx: CanvasRenderingContext2D, biome: Biome): CanvasGradient {
+  // Gradients are bound to a context; rebuild if the draw context changed.
+  if (skyCacheCtx !== ctx) {
+    skyCache.clear();
+    skyCacheCtx = ctx;
+  }
+  let g = skyCache.get(biome.id);
+  if (!g) {
+    g = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+    g.addColorStop(0, biome.skyTop);
+    g.addColorStop(0.6, biome.skyMid);
+    g.addColorStop(1, biome.skyBot);
+    skyCache.set(biome.id, g);
+  }
+  return g;
+}
+
 // ===== Background / sky =====
 export function drawBackground(ctx: CanvasRenderingContext2D, biome: Biome, frame = 0) {
-  const grad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-  grad.addColorStop(0, biome.skyTop);
-  grad.addColorStop(0.6, biome.skyMid);
-  grad.addColorStop(1, biome.skyBot);
-  ctx.fillStyle = grad;
-  ctx.fillRect(-40, -40, WIDTH + 80, HEIGHT + 80);
+  ctx.fillStyle = skyGradient(ctx, biome);
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-  // Underwater light rays from surface
-  if (biome.id === "underwater") {
+  // Underwater light rays — every other frame + fewer rays for perf
+  if (biome.id === "underwater" && (frame & 1) === 0) {
     ctx.save();
-    ctx.globalAlpha = 0.06;
+    ctx.globalAlpha = 0.05;
     const drift = frame * 0.3;
-    for (let i = 0; i < 5; i++) {
-      const x = ((i * 200 + drift) % (WIDTH + 200)) - 100;
-      const w = 30 + Math.sin(i * 1.7) * 15;
+    for (let i = 0; i < 3; i++) {
+      const x = ((i * 260 + drift) % (WIDTH + 200)) - 100;
+      const w = 28 + (i % 2) * 12;
       ctx.fillStyle = "#60d0f0";
       ctx.beginPath();
       ctx.moveTo(x, -10);
       ctx.lineTo(x + w, -10);
-      ctx.lineTo(x + w + 60, HEIGHT + 10);
-      ctx.lineTo(x + 60, HEIGHT + 10);
+      ctx.lineTo(x + w + 50, HEIGHT + 10);
+      ctx.lineTo(x + 50, HEIGHT + 10);
       ctx.closePath();
       ctx.fill();
     }
@@ -75,22 +92,20 @@ export function drawStars(
 
 export function drawSun(ctx: CanvasRenderingContext2D, biome: Biome) {
   if (!biome.hasSun || !biome.sunColor) return;
-  // Soft halo
-  const grad = ctx.createRadialGradient(620, 110, 5, 620, 110, 80);
-  grad.addColorStop(0, biome.sunColor);
-  grad.addColorStop(0.4, "rgba(255, 208, 96, 0.4)");
-  grad.addColorStop(1, "rgba(255, 208, 96, 0)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(540, 30, 160, 160);
-  // Core
+  // Cheap soft halo — no radial gradient (expensive when recreated each frame)
+  ctx.fillStyle = "rgba(255, 208, 96, 0.18)";
+  ctx.beginPath();
+  ctx.arc(620, 110, 52, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = biome.sunColor;
   ctx.beginPath();
-  ctx.arc(620, 110, 22, 0, Math.PI * 2);
+  ctx.arc(620, 110, 20, 0, Math.PI * 2);
   ctx.fill();
 }
 
 export function drawRain(ctx: CanvasRenderingContext2D, rain: RainDrop[]) {
-  ctx.strokeStyle = "rgba(180, 210, 240, 0.55)";
+  if (rain.length === 0) return;
+  ctx.strokeStyle = "rgba(180, 210, 240, 0.5)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   for (const r of rain) {
@@ -98,15 +113,7 @@ export function drawRain(ctx: CanvasRenderingContext2D, rain: RainDrop[]) {
     ctx.lineTo(r.x - 2, r.y + r.length);
   }
   ctx.stroke();
-  // Splash dots where rain hits the ground
-  ctx.fillStyle = "rgba(180, 210, 240, 0.3)";
-  for (const r of rain) {
-    if (r.y + r.length > HEIGHT - 20) {
-      ctx.beginPath();
-      ctx.arc(r.x - 2, HEIGHT - 4, 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
+  // Skip per-drop splash arcs — they were a major cost in storm biome.
 }
 
 export function drawLightningFlash(ctx: CanvasRenderingContext2D, intensity: number) {
@@ -195,14 +202,14 @@ export function drawObstacle(
     return;
   }
   const halfGap = o.gap / 2;
-  // Body gradient
-  const grad = ctx.createLinearGradient(o.x, 0, o.x + OBSTACLE_WIDTH, 0);
-  grad.addColorStop(0, biome.pillarMain[0]);
-  grad.addColorStop(0.5, biome.pillarMain[1]);
-  grad.addColorStop(1, biome.pillarMain[2]);
-  ctx.fillStyle = grad;
+  // Solid fill (no per-pillar createLinearGradient — large win with many columns)
+  ctx.fillStyle = biome.pillarMain[1];
   ctx.fillRect(o.x, 0, OBSTACLE_WIDTH, o.gapY - halfGap);
   ctx.fillRect(o.x, o.gapY + halfGap, OBSTACLE_WIDTH, HEIGHT - (o.gapY + halfGap));
+  // Edge strips for depth without a full gradient
+  ctx.fillStyle = biome.pillarMain[0];
+  ctx.fillRect(o.x, 0, 5, o.gapY - halfGap);
+  ctx.fillRect(o.x, o.gapY + halfGap, 5, HEIGHT - (o.gapY + halfGap));
   // Caps
   ctx.fillStyle = biome.pillarCap;
   ctx.fillRect(o.x, o.gapY - halfGap - 8, OBSTACLE_WIDTH, 8);
@@ -425,17 +432,14 @@ function drawBurstBeam(
   ctx.fillStyle = bloom;
   ctx.fillRect(oxLeft, y1, OBSTACLE_WIDTH, y2 - y1);
 
-  // Solid hot core — fat at burst, narrows as intensity fades
-  ctx.shadowColor = "#ff3060";
-  ctx.shadowBlur = 20 * intensity;
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 6 + 8 * intensity;
+  // Solid hot core — no shadowBlur (canvas shadows are extremely expensive)
+  ctx.strokeStyle = `rgba(255,90,120,${intensity})`;
+  ctx.lineWidth = 14 + 10 * intensity;
   ctx.beginPath();
   ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
   ctx.stroke();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = `rgba(255,90,120,${intensity})`;
-  ctx.lineWidth = 14 + 12 * intensity;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 5 + 6 * intensity;
   ctx.beginPath();
   ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
   ctx.stroke();
@@ -463,18 +467,14 @@ function drawThinBeam(
   ctx.fillStyle = bloom;
   ctx.fillRect(oxLeft, y1, OBSTACLE_WIDTH, y2 - y1);
 
-  // White core
-  ctx.shadowColor = "#ff3060";
-  ctx.shadowBlur = 10;
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 3;
+  // White core + red overlay (no shadowBlur)
+  ctx.strokeStyle = "rgba(255,90,130,0.7)";
+  ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
   ctx.stroke();
-  ctx.shadowBlur = 0;
-  // Red overlay
-  ctx.strokeStyle = "rgba(255,90,130,0.7)";
-  ctx.lineWidth = 6;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(cx, y1); ctx.lineTo(cx, y2);
   ctx.stroke();
@@ -868,24 +868,15 @@ export function drawHeli(
 export function drawMagnetAura(
   ctx: CanvasRenderingContext2D, x: number, y: number, frame: number
 ) {
-  // Inner pulsing glow
-  const pulseR = 25 + Math.sin(frame * 0.1) * 8;
-  const innerGlow = ctx.createRadialGradient(x, y, 5, x, y, pulseR);
-  innerGlow.addColorStop(0, "rgba(214, 61, 61, 0.25)");
-  innerGlow.addColorStop(1, "rgba(214, 61, 61, 0)");
-  ctx.fillStyle = innerGlow;
-  ctx.fillRect(x - pulseR, y - pulseR, pulseR * 2, pulseR * 2);
-  // Expanding rings
-  for (let i = 0; i < 3; i++) {
-    const phase = (frame * 0.03 + i * 0.33) % 1;
-    const r = 30 + phase * 120;
-    const alpha = (1 - phase) * 0.4;
-    ctx.strokeStyle = `rgba(255, 80, 80, ${alpha})`;
-    ctx.lineWidth = 2.5 - phase * 1.5;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  // One ring only (was 3 rings + radial gradient every frame)
+  const phase = (frame * 0.03) % 1;
+  const r = 30 + phase * 100;
+  const alpha = (1 - phase) * 0.35;
+  ctx.strokeStyle = `rgba(255, 80, 80, ${alpha})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
   // Orbiting attraction dots
   ctx.fillStyle = "rgba(255, 120, 120, 0.6)";
   for (let i = 0; i < 6; i++) {
@@ -1180,17 +1171,14 @@ export function drawTornado(
   const baseY = HEIGHT - 70; // sits a bit above the ground so mountains overlap
   const topR = 56;
   const baseR = 9;
-  const rings = 14;
+  const rings = 7; // fewer rings = big storm-biome savings
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
 
-  // Subtle radial darkening behind it — feels like a debris cloud
-  const halo = ctx.createRadialGradient(x, (topY + baseY) / 2, 20, x, (topY + baseY) / 2, 110);
-  halo.addColorStop(0, "rgba(10,10,18,0.55)");
-  halo.addColorStop(1, "rgba(10,10,18,0)");
-  ctx.fillStyle = halo;
-  ctx.fillRect(x - 110, topY - 30, 220, baseY - topY + 60);
+  // Flat halo (no radial gradient)
+  ctx.fillStyle = "rgba(10,10,18,0.35)";
+  ctx.fillRect(x - 70, topY - 10, 140, baseY - topY + 30);
 
   // Stack of ellipses from top to base, each rotated and swayed slightly
   for (let i = 0; i < rings; i++) {
@@ -1251,7 +1239,7 @@ export function drawTornado(
 
   // Swirling debris specks orbiting the funnel
   ctx.fillStyle = "rgba(180,180,200,0.7)";
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 4; i++) {
     const spin = frame * 0.12 + i * 0.7 + phase;
     const yT = (i / 9);
     const orbitR = topR * 0.55 * (1 - yT * 0.55);
@@ -1269,23 +1257,20 @@ export function drawTornado(
 
 
 export function drawSpaceWarp(ctx: CanvasRenderingContext2D, frame: number) {
+  // Simple streaks — no per-streak createLinearGradient
   ctx.save();
-  ctx.globalAlpha = 0.5;
-  for (let i = 0; i < 14; i++) {
+  ctx.strokeStyle = "rgba(200,215,255,0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
     const seed = i * 137.5;
-    const y = (seed % HEIGHT);
+    const y = seed % HEIGHT;
     const speed = 2 + (i % 5);
     const x = WIDTH - ((frame * speed + seed * 3) % (WIDTH + 120));
-    const len = 20 + (i % 4) * 18;
-    const g = ctx.createLinearGradient(x, y, x + len, y);
-    g.addColorStop(0, "rgba(180,200,255,0)");
-    g.addColorStop(1, "rgba(200,215,255,0.5)");
-    ctx.strokeStyle = g;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
+    const len = 20 + (i % 4) * 16;
     ctx.moveTo(x, y);
     ctx.lineTo(x + len, y);
-    ctx.stroke();
   }
+  ctx.stroke();
   ctx.restore();
 }
