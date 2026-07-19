@@ -10,6 +10,7 @@ async function makeUser(store: MemoryAuthStore): Promise<User> {
     passwordHash: await hashPassword("a good long password"),
     displayName: "Player",
     emailVerified: false,
+    xp: 0,
     createdAt: "2026-07-19T00:00:00.000Z",
   });
 }
@@ -109,6 +110,7 @@ describe("MemoryAuthStore", () => {
         passwordHash: "x",
         displayName: "Impostor",
         emailVerified: false,
+        xp: 0,
         createdAt: "2026-07-19T00:00:00.000Z",
       }),
     ).rejects.toThrow(/already registered/);

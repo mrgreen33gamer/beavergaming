@@ -5,6 +5,7 @@ import type { CartridgeMeta } from "@/lib/platform/cartridge";
 import { useMuted } from "@/lib/platform/audio";
 import { setGamePaused } from "@/lib/platform/pauseBus";
 import { installPauseFreeze } from "@/lib/platform/pauseFreeze";
+import EarningsHud from "./EarningsHud";
 
 interface GameShellProps {
   meta: CartridgeMeta;
@@ -85,7 +86,8 @@ export default function GameShell({ meta, accent, children }: GameShellProps) {
 
   return (
     <div ref={containerRef} className="relative">
-      <div className="mb-2 flex items-center justify-end gap-2">
+      <div className="relative mb-2 flex items-center justify-end gap-2">
+        <EarningsHud gameId={meta.id} />
         {canPause && (
           <button
             onClick={pause}

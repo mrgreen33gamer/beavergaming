@@ -39,6 +39,7 @@ export async function POST(req: Request) {
       passwordHash: await hashPassword(password),
       displayName,
       emailVerified: false,
+      xp: 0,
       createdAt: new Date().toISOString(),
     });
   } catch (err) {
