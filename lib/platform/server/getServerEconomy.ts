@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { Economy } from "@/lib/platform/economy";
 import { SaveApi } from "@/lib/platform/save";
-import { selectAdapter } from "@/lib/platform/storage";
+import { selectServerAdapter } from "@/lib/platform/storage/selectServer";
 import { MemoryAdapter } from "./memoryAdapter";
 import type { StorageAdapter } from "@/lib/platform/storage/types";
 
@@ -14,7 +14,7 @@ function getServerAdapter(): StorageAdapter {
   if (cachedAdapter) return cachedAdapter;
   const uri = process.env.MONGODB_URI?.trim();
   if (uri) {
-    cachedAdapter = selectAdapter({
+    cachedAdapter = selectServerAdapter({
       MONGODB_URI: uri,
       MONGODB_DB: process.env.MONGODB_DB ?? "beavergaming",
     });

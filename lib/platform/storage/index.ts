@@ -1,15 +1,13 @@
 import type { StorageAdapter } from "./types";
 import { LocalStorageAdapter } from "./localStorage";
-import { MongoAdapter } from "./mongo";
 
 export type { StorageAdapter, LedgerEntry, LedgerReason } from "./types";
 export { LocalStorageAdapter } from "./localStorage";
-export { MongoAdapter } from "./mongo";
 
 /**
- * Select the persistence backend.
- * - No URI → LocalStorageAdapter (browser / offline)
- * - URI set → MongoAdapter (server API only)
+ * Browser-safe barrel. MongoAdapter lives in ./mongo and must only be imported
+ * from server code (API routes / getServerEconomy) so the mongodb driver is
+ * never bundled into client components.
  */
 export function selectAdapter(env: {
   MONGODB_URI?: string;
@@ -17,7 +15,11 @@ export function selectAdapter(env: {
 } = {}): StorageAdapter {
   const uri = env.MONGODB_URI?.trim();
   if (uri) {
-    return new MongoAdapter(uri, env.MONGODB_DB);
+    // Dynamic require is intentionally avoided — callers that need Mongo must
+    // import selectServerAdapter from ./selectServer instead.
+    throw new Error(
+      "Mongo selection is server-only. Use selectServerAdapter from @/lib/platform/storage/selectServer",
+    );
   }
   return new LocalStorageAdapter();
 }
@@ -25,11 +27,7 @@ export function selectAdapter(env: {
 let cached: StorageAdapter | null = null;
 
 /**
- * The adapter used by client-side game code.
- *
- * Always localStorage in the browser: MONGODB_URI is a server-only secret and
- * must never reach the client bundle. Server economy routes call
- * selectAdapter({ MONGODB_URI }) directly.
+ * Client-side game persistence. Always localStorage in the browser.
  */
 export function getStorage(): StorageAdapter {
   if (cached === null) cached = new LocalStorageAdapter();
