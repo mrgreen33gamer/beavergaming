@@ -9,6 +9,10 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // scripts/*.mts run under plain Node, whose ESM resolver requires the
+    // explicit .ts extension on relative imports. Safe here because the
+    // project is noEmit — nothing is compiled to JS that would need rewriting.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:cards": "node scripts/generate-cards.mts",
+    "gen:cards:dry": "node scripts/generate-cards.mts --dry-run"
   },
   "dependencies": {
     "mongodb": "^7.5.0",

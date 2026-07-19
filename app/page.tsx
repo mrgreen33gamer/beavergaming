@@ -3,10 +3,12 @@ import Image from "next/image";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import GameLibrary from "./components/GameLibrary";
+import { getCardImage } from "@/lib/cardImage";
 import { getFeaturedGame } from "@/lib/games";
 
 export default function Home() {
   const featured = getFeaturedGame();
+  const featuredArt = getCardImage(featured);
 
   return (
     <>
@@ -46,9 +48,9 @@ export default function Home() {
                   background: `linear-gradient(135deg, ${featured.accent}33 0%, ${featured.accent}11 100%)`,
                 }}
               >
-                {featured.cardImage ? (
+                {featuredArt ? (
                   <Image
-                    src={`/game-cards/${featured.cardImage}`}
+                    src={`/game-cards/${featuredArt}`}
                     alt=""
                     fill
                     priority

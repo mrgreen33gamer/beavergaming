@@ -506,3 +506,4 @@ export function getGame(slug: string): Game | undefined {
 export function getFeaturedGame(): Game {
   return games.find((g) => g.featured) ?? games[0];
 }
+

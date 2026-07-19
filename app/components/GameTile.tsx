@@ -1,8 +1,11 @@
 import Link from "next/link";
 import Image from "next/image";
+import { getCardImage } from "@/lib/cardImage";
 import type { Game } from "@/lib/games";
 
 export default function GameTile({ game }: { game: Game }) {
+  const cardImage = getCardImage(game);
+
   return (
     <Link
       href={`/play/${game.slug}`}
@@ -14,11 +17,11 @@ export default function GameTile({ game }: { game: Game }) {
           background: `linear-gradient(135deg, ${game.accent}22 0%, ${game.accent}08 100%)`,
         }}
       >
-        {game.cardImage ? (
+        {cardImage ? (
           /* Decorative: the title is announced by the heading below, so an
              alt here would just repeat it to screen readers. */
           <Image
-            src={`/game-cards/${game.cardImage}`}
+            src={`/game-cards/${cardImage}`}
             alt=""
             fill
             sizes="(max-width: 640px) 80vw, (max-width: 1024px) 40vw, 280px"
