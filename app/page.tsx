@@ -10,7 +10,7 @@ export default function Home() {
 
   return (
     <>
-      <Header />
+      <Header activeCat="all" />
       <main className="flex-1 max-w-6xl mx-auto px-6 py-8 w-full">
         {/* Hero */}
         <section className="mb-12">

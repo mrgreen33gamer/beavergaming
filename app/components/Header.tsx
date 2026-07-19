@@ -3,8 +3,9 @@ import { categories } from "@/lib/games";
 import TokenBalance from "./TokenBalance";
 
 /**
- * `activeCat` is passed by the home page so the current genre filter reads as
- * selected. Other routes (e.g. /play/[slug]) omit it and no chip is active.
+ * `activeCat` marks the selected genre chip: "all" on the home page, a genre
+ * id on /genre/[cat]. Routes that are not part of the browse hierarchy (e.g.
+ * /play/[slug]) omit it entirely so no chip reads as selected.
  */
 export default function Header({ activeCat }: { activeCat?: string }) {
   return (
@@ -24,11 +25,11 @@ export default function Header({ activeCat }: { activeCat?: string }) {
           <nav aria-label="Genres" className="flex flex-wrap gap-1">
             <Link
               href="/"
-              aria-current={activeCat ? undefined : "page"}
+              aria-current={activeCat === "all" ? "page" : undefined}
               className={`t-body px-3 py-1 rounded transition-colors ${
-                activeCat
-                  ? "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--accent-hot)]"
-                  : "bg-[var(--surface-2)] text-[var(--accent)]"
+                activeCat === "all"
+                  ? "bg-[var(--surface-2)] text-[var(--accent)]"
+                  : "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--accent-hot)]"
               }`}
             >
               All
