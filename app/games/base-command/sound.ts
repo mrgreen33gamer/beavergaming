@@ -1,9 +1,15 @@
+import { isMuted as platformMuted } from "@/lib/platform/audio";
+
 let ctx: AudioContext | null = null;
 
 function getCtx(): AudioContext {
   if (!ctx) ctx = new AudioContext();
   if (ctx.state === "suspended") ctx.resume();
   return ctx;
+}
+
+function silenced() {
+  return platformMuted();
 }
 
 function noise(ac: AudioContext, duration: number, volume: number): AudioBufferSourceNode {
@@ -16,6 +22,7 @@ function noise(ac: AudioContext, duration: number, volume: number): AudioBufferS
 }
 
 export function playShoot(pitch = 800) {
+  if (silenced()) return;
   try {
     const ac = getCtx(), t = ac.currentTime;
     const osc = ac.createOscillator();
@@ -31,6 +38,7 @@ export function playShoot(pitch = 800) {
 }
 
 export function playExplosion(big = false) {
+  if (silenced()) return;
   try {
     const ac = getCtx(), t = ac.currentTime;
     const dur = big ? 0.5 : 0.2;
@@ -48,6 +56,7 @@ export function playExplosion(big = false) {
 }
 
 export function playBuild() {
+  if (silenced()) return;
   try {
     const ac = getCtx(), t = ac.currentTime;
     const osc = ac.createOscillator();
@@ -63,6 +72,7 @@ export function playBuild() {
 }
 
 export function playWaveStart() {
+  if (silenced()) return;
   try {
     const ac = getCtx(), t = ac.currentTime;
     [440, 550, 660].forEach((f, i) => {
@@ -79,6 +89,7 @@ export function playWaveStart() {
 }
 
 export function playAbility() {
+  if (silenced()) return;
   try {
     const ac = getCtx(), t = ac.currentTime;
     const osc = ac.createOscillator();
@@ -94,6 +105,7 @@ export function playAbility() {
 }
 
 export function playCombo() {
+  if (silenced()) return;
   try {
     const ac = getCtx(), t = ac.currentTime;
     [600, 800, 1000].forEach((f, i) => {
@@ -110,6 +122,7 @@ export function playCombo() {
 }
 
 export function playGameOver() {
+  if (silenced()) return;
   try {
     const ac = getCtx(), t = ac.currentTime;
     [400, 300, 200, 100].forEach((f, i) => {

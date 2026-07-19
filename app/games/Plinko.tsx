@@ -1,1 +1,1 @@
-export { default } from "./plinko";
+export { default } from "./plinko/index";

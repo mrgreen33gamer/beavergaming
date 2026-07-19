@@ -1,1 +1,1 @@
-export { default } from "./reversi";
+export { default } from "./reversi/index";

@@ -214,7 +214,7 @@ export default function SnakeGame() {
     }
     const head = s.snake[0];
     const v = dirVec[s.direction];
-    let newHead: Point = { x: head.x + v.x, y: head.y + v.y };
+    const newHead: Point = { x: head.x + v.x, y: head.y + v.y };
 
     const ghostActive = s.ghostUntil > now;
 

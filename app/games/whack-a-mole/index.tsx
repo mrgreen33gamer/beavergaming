@@ -351,7 +351,7 @@ export default function WhackAMole() {
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   // ===== Whack a mole / handle a click =====

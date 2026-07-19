@@ -514,7 +514,7 @@ export default function AppleShooter() {
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [level, setupLevel]);
 
   // ===== Input handling =====

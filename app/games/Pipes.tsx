@@ -1,1 +1,1 @@
-export { default } from "./pipes";
+export { default } from "./pipes/index";

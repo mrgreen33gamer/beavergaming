@@ -109,7 +109,7 @@ export default function Game2048() {
     const b = localStorage.getItem("2048-best");
     if (b) setBest(parseInt(b, 10));
     newGame();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   const newGame = () => {

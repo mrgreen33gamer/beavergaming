@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const SIZE = 5;
 
@@ -30,18 +31,11 @@ function randomBoard(level: number): Grid {
 }
 
 export default function LightsOut() {
-  const [grid, setGrid] = useState<Grid>(emptyGrid);
+  const [grid, setGrid] = useState<Grid>(() => randomBoard(1));
   const [level, setLevel] = useState(1);
   const [moves, setMoves] = useState(0);
   const [solved, setSolved] = useState(false);
-  const [bestLevel, setBestLevel] = useState(1);
-
-  useEffect(() => {
-    const b = localStorage.getItem("lightsout-best");
-    if (b) setBestLevel(parseInt(b, 10));
-    newPuzzle(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { host, highScore: bestLevel } = useCartridge("lights-out");
 
   const newPuzzle = (lv: number) => {
     setLevel(lv);
@@ -50,6 +44,13 @@ export default function LightsOut() {
     setSolved(false);
   };
 
+  // Turn-based: shell overlay already blocks clicks; register pause no-ops so
+  // the host surface is exercised consistently with other pilots.
+  useEffect(() => {
+    host.onPause(() => {});
+    host.onResume(() => {});
+  }, [host]);
+
   const press = (r: number, c: number) => {
     if (solved) return;
     const next = toggle(grid, r, c);
@@ -57,10 +58,10 @@ export default function LightsOut() {
     setMoves((m) => m + 1);
     if (next.every((row) => row.every((v) => !v))) {
       setSolved(true);
-      if (level >= bestLevel) {
-        setBestLevel(level + 1);
-        localStorage.setItem("lightsout-best", String(level + 1));
-      }
+      host.reportEvent("level_cleared");
+      // Persist the next level as the high-water mark, matching the old
+      // "lightsout-best" semantics (best = highest level reached).
+      host.reportScore(level + 1);
     }
   };
 

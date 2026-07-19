@@ -72,7 +72,7 @@ export default function WordSearch() {
     const b = localStorage.getItem("wordsearch-best");
     if (b) setBestSec(parseInt(b, 10));
     newPuzzle(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   useEffect(() => {

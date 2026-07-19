@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const WIDTH = 600;
 const HEIGHT = 460;
@@ -31,11 +32,15 @@ const SIZE_RADIUS = [0, 14, 26, 42]; // index by size 1..3
 export default function Asteroids() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
+  const { host, highScore } = useCartridge("asteroids");
   const [lives, setLives] = useState(3);
   const [wave, setWave] = useState(1);
   const [gameOver, setGameOver] = useState(false);
   const [started, setStarted] = useState(false);
+  const hostRef = useRef(host);
+  useEffect(() => {
+    hostRef.current = host;
+  }, [host]);
 
   const s = useRef({
     ship: { x: WIDTH / 2, y: HEIGHT / 2, angle: -Math.PI / 2, vx: 0, vy: 0, thrust: false } as Ship,
@@ -43,16 +48,12 @@ export default function Asteroids() {
     bullets: [] as Bullet[],
     keys: { left: false, right: false, up: false },
     running: false,
+    paused: false,
     score: 0, lives: 3, wave: 1,
     invuln: 0,
     lastShot: 0,
     lastSync: 0,
   });
-
-  useEffect(() => {
-    const saved = localStorage.getItem("asteroids-highscore");
-    if (saved) setHighScore(parseInt(saved, 10));
-  }, []);
 
   const spawnWave = (st: typeof s.current, n: number) => {
     st.roids = [];
@@ -77,17 +78,33 @@ export default function Asteroids() {
   };
 
   useEffect(() => {
+    host.onPause(() => {
+      s.current.paused = true;
+    });
+    host.onResume(() => {
+      s.current.paused = false;
+    });
+  }, [host]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     let raf = 0;
 
+    const die = (st: typeof s.current) => {
+      st.running = false;
+      setScore(st.score);
+      hostRef.current.reportScore(st.score);
+      setGameOver(true);
+    };
+
     const loop = () => {
       const st = s.current;
       const sh = st.ship;
 
-      if (st.running) {
+      if (st.running && !st.paused) {
         // Rotate / thrust
         if (st.keys.left) sh.angle -= 0.09;
         if (st.keys.right) sh.angle += 0.09;
@@ -210,15 +227,7 @@ export default function Asteroids() {
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const die = (st: typeof s.current) => {
-    st.running = false;
-    setScore(st.score);
-    if (st.score > highScore) { setHighScore(st.score); localStorage.setItem("asteroids-highscore", String(st.score)); }
-    setGameOver(true);
-  };
 
   const shoot = (st: typeof s.current) => {
     const now = performance.now();

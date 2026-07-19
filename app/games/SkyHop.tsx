@@ -1,1 +1,1 @@
-export { default } from "./sky-hop";
+export { default } from "./sky-hop/index";

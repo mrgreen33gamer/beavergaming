@@ -1,1 +1,1 @@
-export { default } from "./stack-tower";
+export { default } from "./stack-tower/index";

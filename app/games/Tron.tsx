@@ -1,1 +1,1 @@
-export { default } from "./tron";
+export { default } from "./tron/index";

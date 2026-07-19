@@ -1,1 +1,1 @@
-export { default } from "./missile-command";
+export { default } from "./missile-command/index";

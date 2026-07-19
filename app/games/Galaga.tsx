@@ -1,1 +1,1 @@
-export { default } from "./galaga";
+export { default } from "./galaga/index";

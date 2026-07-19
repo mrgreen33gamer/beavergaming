@@ -1,11 +1,28 @@
 // Helicopter game sound system — Web Audio API, zero dependencies.
 // All sounds are synthesised from oscillators + noise so no audio files are needed.
 
+import { isMuted as platformMuted, subscribeMute } from "@/lib/platform/audio";
+
 let ctx: AudioContext | null = null;
 let muted = false;
 let rotorOsc: OscillatorNode | null = null;
 let rotorLfo: OscillatorNode | null = null;
 let rotorGain: GainNode | null = null;
+
+function silenced() {
+  return muted || platformMuted();
+}
+
+function applyRotorGain() {
+  if (rotorGain) rotorGain.gain.value = silenced() ? 0 : 0.012;
+}
+
+if (typeof window !== "undefined") {
+  subscribeMute((m) => {
+    applyRotorGain();
+    setMusicMuted(m || muted);
+  });
+}
 
 // ===== Init (call on first user gesture) =====
 export function initAudio() {
@@ -19,11 +36,11 @@ export function initAudio() {
 
 export function setMuted(m: boolean) {
   muted = m;
-  if (rotorGain) rotorGain.gain.value = m ? 0 : 0.012;
-  setMusicMuted(m);
+  applyRotorGain();
+  setMusicMuted(silenced());
 }
 
-export function isMuted() { return muted; }
+export function isMuted() { return silenced(); }
 
 // ===== Helpers =====
 function tone(
@@ -33,7 +50,7 @@ function tone(
   type: OscillatorType = "square",
   delay = 0
 ) {
-  if (!ctx || muted) return;
+  if (!ctx || silenced()) return;
   const t = ctx.currentTime + delay;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -68,7 +85,7 @@ export function playPowerUp() {
 }
 
 export function playCrash() {
-  if (!ctx || muted) return;
+  if (!ctx || silenced()) return;
   const dur = 0.35;
   const bufSize = Math.floor(ctx.sampleRate * dur);
   const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
@@ -122,7 +139,7 @@ export function playRedGem() {
 }
 
 export function playSawBuzz() {
-  if (!ctx || muted) return;
+  if (!ctx || silenced()) return;
   const dur = 0.12;
   const bufSize = Math.floor(ctx.sampleRate * dur);
   const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
@@ -149,7 +166,7 @@ export function startRotor() {
   rotorGain = ctx.createGain();
   rotorOsc.type = "sine";
   rotorOsc.frequency.value = 55;
-  rotorGain.gain.value = muted ? 0 : 0.012;
+  rotorGain.gain.value = silenced() ? 0 : 0.012;
   // LFO modulates frequency for subtle chop-chop feel
   rotorLfo = ctx.createOscillator();
   const lfoGain = ctx.createGain();
@@ -235,13 +252,13 @@ function elementFor(biomeIdx: number): HTMLAudioElement | null {
     try { el.volume = 0; } catch { /* ignore */ }
     el.src = url;
     el.addEventListener("error", () => {
-      // eslint-disable-next-line no-console
+       
       console.warn(`[helicopter music] biome ${biomeIdx} (${url}) failed to load — check /public${url}`);
     });
     elements.set(biomeIdx, el);
     return el;
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.warn(`[helicopter music] could not create audio for biome ${biomeIdx}:`, err);
     return null;
   }
@@ -278,7 +295,7 @@ function tryPlay(t: Track) {
         armAutoplayRetry(() => { if (activeTrack === t) tryPlay(t); });
         return;
       }
-      // eslint-disable-next-line no-console
+       
       console.warn(`[helicopter music] play() failed for biome ${t.key}:`, err);
     });
   }
@@ -326,7 +343,7 @@ function ensureFadeLoop() {
       }
     } catch (err) {
       // Defence in depth — never let a thrown error kill the loop forever.
-      // eslint-disable-next-line no-console
+       
       console.warn("[helicopter music] fade tick error (recovering):", err);
     }
     fadeRaf = requestAnimationFrame(tick);

@@ -1,1 +1,1 @@
-export { default } from "./mini-golf";
+export { default } from "./mini-golf/index";

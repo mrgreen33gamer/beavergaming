@@ -1,1 +1,1 @@
-export { default } from "./word-search";
+export { default } from "./word-search/index";

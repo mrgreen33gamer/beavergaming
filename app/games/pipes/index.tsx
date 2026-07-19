@@ -151,7 +151,7 @@ export default function Pipes() {
       });
     }, FLOW_INTERVAL_MS);
     return () => window.clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [phase, seed, puzzle, level, bestLevel]);
 
   const rotate = (r: number, c: number) => {

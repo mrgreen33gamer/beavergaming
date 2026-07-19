@@ -267,7 +267,7 @@ export default function BaseCommand() {
   };
 
   // ===== Abilities =====
-  const useAbility = useCallback((type: string) => {
+  const castAbility = useCallback((type: string) => {
     const s = stateRef.current;
     const ab = s.abilities.find(a => a.type === type);
     if (!ab) return;
@@ -1171,7 +1171,7 @@ export default function BaseCommand() {
               return (
                 <button
                   key={ab.type}
-                  onClick={() => useAbility(ab.type)}
+                  onClick={() => castAbility(ab.type)}
                   disabled={!ready && !active}
                   className={`relative px-2 sm:px-3 py-1.5 rounded font-[family-name:var(--font-mono)] text-sm transition-all ${
                     active ? "bg-[#ff6020] text-white ring-2 ring-[#ff8040]" :

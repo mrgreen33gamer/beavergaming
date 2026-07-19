@@ -1,1 +1,1 @@
-export { default } from "./battleship";
+export { default } from "./battleship/index";

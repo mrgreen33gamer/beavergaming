@@ -1,1 +1,1 @@
-export { default } from "./hangman";
+export { default } from "./hangman/index";

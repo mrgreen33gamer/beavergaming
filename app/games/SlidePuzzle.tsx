@@ -1,1 +1,1 @@
-export { default } from "./slide-puzzle";
+export { default } from "./slide-puzzle/index";

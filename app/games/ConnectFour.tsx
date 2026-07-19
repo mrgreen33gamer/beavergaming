@@ -1,1 +1,1 @@
-export { default } from "./connect-four";
+export { default } from "./connect-four/index";

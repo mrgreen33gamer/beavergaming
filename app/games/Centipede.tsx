@@ -1,1 +1,1 @@
-export { default } from "./centipede";
+export { default } from "./centipede/index";

@@ -1,1 +1,1 @@
-export { default } from "./frogger";
+export { default } from "./frogger/index";

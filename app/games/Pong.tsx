@@ -1,1 +1,1 @@
-export { default } from "./pong";
+export { default } from "./pong/index";
