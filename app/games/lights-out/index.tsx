@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const SIZE = 5;
 
@@ -34,11 +35,9 @@ export default function LightsOut() {
   const [level, setLevel] = useState(1);
   const [moves, setMoves] = useState(0);
   const [solved, setSolved] = useState(false);
-  const [bestLevel, setBestLevel] = useState(1);
+  const { host, highScore: bestLevel } = useCartridge("lights-out");
 
   useEffect(() => {
-    const b = localStorage.getItem("lightsout-best");
-    if (b) setBestLevel(parseInt(b, 10));
     newPuzzle(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -57,10 +56,10 @@ export default function LightsOut() {
     setMoves((m) => m + 1);
     if (next.every((row) => row.every((v) => !v))) {
       setSolved(true);
-      if (level >= bestLevel) {
-        setBestLevel(level + 1);
-        localStorage.setItem("lightsout-best", String(level + 1));
-      }
+      host.reportEvent("level_cleared");
+      // Persist the next level as the high-water mark, matching the old
+      // "lightsout-best" semantics (best = highest level reached).
+      host.reportScore(level + 1);
     }
   };
 
