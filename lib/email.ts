@@ -1,5 +1,7 @@
 import "server-only";
 
+import { envStr } from "./env";
+
 export { escapeHtml, verifyEmailTemplate, resetEmailTemplate } from "./emailTemplates";
 export type { EmailContent } from "./emailTemplates";
 
@@ -26,8 +28,8 @@ export type SendEmailResult =
  * signup.
  */
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
-  const apiKey = process.env.SMTP2GO_API_KEY?.trim();
-  const sender = process.env.FROM_EMAIL?.trim();
+  const apiKey = envStr("SMTP2GO_API_KEY");
+  const sender = envStr("FROM_EMAIL");
 
   if (!apiKey || !sender) {
     console.warn("[email] skipped — SMTP2GO_API_KEY or FROM_EMAIL not set");
@@ -62,8 +64,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 /** Absolute base URL for links in emails, without a trailing slash. */
 export function siteUrl(): string {
   const raw =
-    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_URL?.trim() ||
+    envStr("NEXT_PUBLIC_SITE_URL") ||
+    envStr("NEXT_PUBLIC_URL") ||
     "http://localhost:3000";
   return raw.replace(/\/+$/, "");
 }

@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { MongoClient, type Collection, type Db } from "mongodb";
+import { envStr } from "@/lib/env";
 import { normalizeEmail } from "./memoryStore";
 import {
   DuplicateEmailError,
@@ -27,11 +28,16 @@ export class MongoAuthStore implements AuthStore {
   private dbPromise: Promise<Db> | null = null;
   private indexesReady: Promise<void> | null = null;
 
-  constructor(
-    private readonly uri = process.env.MONGODB_URI ?? "",
-    private readonly dbName = process.env.MONGODB_DB ?? "beavergaming",
-  ) {
-    if (!this.uri.trim()) throw new Error("MongoAuthStore requires MONGODB_URI");
+  private readonly uri: string;
+  private readonly dbName: string;
+
+  constructor(uri?: string, dbName?: string) {
+    // Trimmed without exception: a CRLF-terminated .env value silently
+    // resolves to a *different* database, which is how accounts and the
+    // token ledger once ended up in separate places.
+    this.uri = (uri ?? envStr("MONGODB_URI")).trim();
+    this.dbName = (dbName ?? envStr("MONGODB_DB", "beavergaming")).trim() || "beavergaming";
+    if (!this.uri) throw new Error("MongoAuthStore requires MONGODB_URI");
   }
 
   private async db(): Promise<Db> {

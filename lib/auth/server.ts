@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { envStr } from "@/lib/env";
 import { MemoryAuthStore } from "./memoryStore";
 import { MongoAuthStore } from "./mongoStore";
 import { SESSION_COOKIE, resolveSession } from "./session";
@@ -16,7 +17,7 @@ let cached: AuthStore | null = null;
  */
 export function getAuthStore(): AuthStore {
   if (cached) return cached;
-  const uri = process.env.MONGODB_URI?.trim();
+  const uri = envStr("MONGODB_URI");
   cached = uri ? new MongoAuthStore(uri) : new MemoryAuthStore();
   return cached;
 }
