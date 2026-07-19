@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { envStr } from "@/lib/env";
 import { Economy } from "@/lib/platform/economy";
 import { SaveApi } from "@/lib/platform/save";
 import { selectServerAdapter } from "@/lib/platform/storage/selectServer";
@@ -13,11 +14,11 @@ let cachedAdapter: StorageAdapter | null = null;
 
 export function getServerAdapter(): StorageAdapter {
   if (cachedAdapter) return cachedAdapter;
-  const uri = process.env.MONGODB_URI?.trim();
+  const uri = envStr("MONGODB_URI");
   if (uri) {
     cachedAdapter = selectServerAdapter({
       MONGODB_URI: uri,
-      MONGODB_DB: process.env.MONGODB_DB ?? "beavergaming",
+      MONGODB_DB: envStr("MONGODB_DB", "beavergaming"),
     });
   } else {
     cachedAdapter = new MemoryAdapter();
