@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const WIDTH = 600;
 const HEIGHT = 460;
@@ -31,7 +32,7 @@ const SIZE_RADIUS = [0, 14, 26, 42]; // index by size 1..3
 export default function Asteroids() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
+  const { host, highScore } = useCartridge("asteroids");
   const [lives, setLives] = useState(3);
   const [wave, setWave] = useState(1);
   const [gameOver, setGameOver] = useState(false);
@@ -48,11 +49,6 @@ export default function Asteroids() {
     lastShot: 0,
     lastSync: 0,
   });
-
-  useEffect(() => {
-    const saved = localStorage.getItem("asteroids-highscore");
-    if (saved) setHighScore(parseInt(saved, 10));
-  }, []);
 
   const spawnWave = (st: typeof s.current, n: number) => {
     st.roids = [];
@@ -216,7 +212,7 @@ export default function Asteroids() {
   const die = (st: typeof s.current) => {
     st.running = false;
     setScore(st.score);
-    if (st.score > highScore) { setHighScore(st.score); localStorage.setItem("asteroids-highscore", String(st.score)); }
+    host.reportScore(st.score);
     setGameOver(true);
   };
 
