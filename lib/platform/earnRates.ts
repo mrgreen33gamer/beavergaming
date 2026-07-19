@@ -22,12 +22,34 @@ export const DEFAULT_RATE: EarnRate = {
 /**
  * Per-game overrides. Games with inflated score scales get lower rates so a
  * point is worth roughly the same across the catalogue.
+ *
+ * Rates are normalised against a target of roughly 30 B-Tokens for a strong
+ * three-minute run, derived from each game's actual point values:
+ *
+ *   helicopter  gems 25-100, coins 10   → ~3,000 pts/run
+ *   pacman      pellets 10, ghosts 200  → ~4,000 pts/run
+ *   tetris      line clears + hard drop → ~5,000 pts/run
+ *   snake       per-food, small scale   → ~500 pts/run
+ *
+ * These are first-pass estimates from reading the scoring code, not from
+ * telemetry. They should be revisited once real score distributions exist.
  */
 export const GAME_RATES: Record<string, Partial<EarnRate>> = {
   asteroids: { tokensPerPoint: 0.002 },
   breakout: { tokensPerPoint: 0.005 },
   "apple-shooter": { tokensPerPoint: 0.005 },
   "dam-rush": { tokensPerPoint: 0.005 },
+  helicopter: { tokensPerPoint: 0.01 },
+  pacman: { tokensPerPoint: 0.0075 },
+  tetris: { tokensPerPoint: 0.006 },
+  snake: { tokensPerPoint: 0.06 },
+
+  /**
+   * Event-paid games. These report a score so it can be tracked as a high
+   * score, but are paid through EVENT_REWARDS — a rate of 0 keeps the
+   * leaderboard working without paying twice for the same achievement.
+   */
+  "lights-out": { tokensPerPoint: 0 },
 };
 
 /** Flat rewards for non-score games. Unknown events are worth nothing. */
