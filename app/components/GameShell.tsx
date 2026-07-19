@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CartridgeMeta } from "@/lib/platform/cartridge";
 import { useMuted } from "@/lib/platform/audio";
 import { setGamePaused } from "@/lib/platform/pauseBus";
+import { installPauseFreeze } from "@/lib/platform/pauseFreeze";
 
 interface GameShellProps {
   meta: CartridgeMeta;
@@ -35,6 +36,11 @@ export default function GameShell({ meta, accent, children }: GameShellProps) {
   const resume = useCallback(() => {
     setPaused(false);
     setGamePaused(false);
+  }, []);
+
+  // Install global rAF freeze once so unmigrated games stop under pause too.
+  useEffect(() => {
+    installPauseFreeze();
   }, []);
 
   // Clear global pause when leaving a game page.

@@ -252,13 +252,13 @@ function elementFor(biomeIdx: number): HTMLAudioElement | null {
     try { el.volume = 0; } catch { /* ignore */ }
     el.src = url;
     el.addEventListener("error", () => {
-      // eslint-disable-next-line no-console
+       
       console.warn(`[helicopter music] biome ${biomeIdx} (${url}) failed to load — check /public${url}`);
     });
     elements.set(biomeIdx, el);
     return el;
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.warn(`[helicopter music] could not create audio for biome ${biomeIdx}:`, err);
     return null;
   }
@@ -295,7 +295,7 @@ function tryPlay(t: Track) {
         armAutoplayRetry(() => { if (activeTrack === t) tryPlay(t); });
         return;
       }
-      // eslint-disable-next-line no-console
+       
       console.warn(`[helicopter music] play() failed for biome ${t.key}:`, err);
     });
   }
@@ -343,7 +343,7 @@ function ensureFadeLoop() {
       }
     } catch (err) {
       // Defence in depth — never let a thrown error kill the loop forever.
-      // eslint-disable-next-line no-console
+       
       console.warn("[helicopter music] fade tick error (recovering):", err);
     }
     fadeRaf = requestAnimationFrame(tick);

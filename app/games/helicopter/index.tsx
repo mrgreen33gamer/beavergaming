@@ -46,6 +46,8 @@ import {
   startRotor, stopRotor,
   setMusicForBiome, pauseMusic, resumeMusic, stopMusic,
 } from "./sound";
+import { subscribeGamePause } from "@/lib/platform/pauseBus";
+import { subscribeMute } from "@/lib/platform/audio";
 
 const SPACE_IDX = BIOMES.findIndex((b) => b.id === "space");
 
@@ -53,6 +55,8 @@ export default function HelicopterGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  /** CSS pseudo-fullscreen for browsers (iOS Safari) that lack element FS. */
+  const [cssFullscreen, setCssFullscreen] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
@@ -107,6 +111,8 @@ export default function HelicopterGame() {
     }
   }, []);
 
+  const inAnyFullscreen = isFullscreen || cssFullscreen;
+
   // Track whether the wrapper is currently the fullscreen element. We listen
   // for the platform event so the state stays in sync even when the user exits
   // fullscreen with Esc, swipe-down, or the system back button.
@@ -116,7 +122,9 @@ export default function HelicopterGame() {
       const el = document.fullscreenElement
         ?? (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
         ?? null;
-      setIsFullscreen(el === fullscreenRef.current);
+      const native = el === fullscreenRef.current;
+      setIsFullscreen(native);
+      if (native) setCssFullscreen(false);
     };
     document.addEventListener("fullscreenchange", handler);
     document.addEventListener("webkitfullscreenchange", handler);
@@ -126,6 +134,16 @@ export default function HelicopterGame() {
     };
   }, []);
 
+  // Lock body scroll while in any fullscreen mode (esp. mobile).
+  useEffect(() => {
+    if (!inAnyFullscreen || typeof document === "undefined") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [inAnyFullscreen]);
+
   const toggleFullscreen = useCallback(() => {
     if (typeof document === "undefined") return;
     const wrapper = fullscreenRef.current;
@@ -134,18 +152,38 @@ export default function HelicopterGame() {
       webkitFullscreenElement?: Element;
       webkitExitFullscreen?: () => Promise<void>;
     };
-    const inFullscreen = !!(document.fullscreenElement ?? doc.webkitFullscreenElement);
-    if (!inFullscreen) {
-      const req = (
-        wrapper.requestFullscreen
-        ?? (wrapper as HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen
-      );
-      try { req?.call(wrapper)?.catch?.(() => { /* user gesture required or unsupported */ }); } catch { /* ignore */ }
-    } else {
+    const inNative = !!(document.fullscreenElement ?? doc.webkitFullscreenElement);
+
+    // Exit either mode first.
+    if (inNative) {
       const exit = document.exitFullscreen ?? doc.webkitExitFullscreen;
       try { exit?.call(document)?.catch?.(() => { /* ignore */ }); } catch { /* ignore */ }
+      setCssFullscreen(false);
+      return;
     }
-  }, []);
+    if (cssFullscreen) {
+      setCssFullscreen(false);
+      return;
+    }
+
+    // Prefer native Fullscreen API; fall back to CSS fullscreen (iOS Safari).
+    const req = (
+      wrapper.requestFullscreen
+      ?? (wrapper as HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen
+    );
+    if (typeof req === "function") {
+      try {
+        const p = req.call(wrapper) as Promise<void> | undefined;
+        if (p && typeof p.then === "function") {
+          p.catch(() => setCssFullscreen(true));
+        }
+      } catch {
+        setCssFullscreen(true);
+      }
+    } else {
+      setCssFullscreen(true);
+    }
+  }, [cssFullscreen]);
 
   const updateSetting = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) => {
     setSettingsState(prev => {
@@ -221,6 +259,24 @@ export default function HelicopterGame() {
     explosionY: 0,
     explosionFrame: 0,
   });
+
+  // Follow platform shell pause (GameShell) so both pause UIs stay in sync.
+  useEffect(() => {
+    return subscribeGamePause((p) => {
+      stateRef.current.paused = p;
+      setPaused(p);
+      if (p) pauseMusic();
+      else if (stateRef.current.running) resumeMusic();
+    });
+  }, []);
+
+  // Master mute from GameShell + local settings.
+  useEffect(() => {
+    return subscribeMute((m) => {
+      if (m) setAudioMuted(true);
+      else if (settingsRef.current.sound) setAudioMuted(false);
+    });
+  }, []);
 
   // Load high scores for current difficulty
   useEffect(() => {
@@ -433,6 +489,13 @@ export default function HelicopterGame() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // Crisp rendering on high-DPI mobile screens.
+    const dpr = Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2);
+    canvas.width = Math.floor(WIDTH * dpr);
+    canvas.height = Math.floor(HEIGHT * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
     let raf = 0;
     let frame = 0;
 
@@ -1100,14 +1163,14 @@ export default function HelicopterGame() {
       } catch (err) {
         // Defence in depth: any uncaught error inside a frame must NOT kill
         // the whole loop. Log it and keep going on the next frame.
-        // eslint-disable-next-line no-console
+         
         console.warn("[helicopter loop] frame error (recovering):", err);
       }
       raf = requestAnimationFrame(draw);
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [highScore, rebuildStars]);
 
   // Pickup collection
@@ -1328,19 +1391,19 @@ export default function HelicopterGame() {
   const distanceMeters = Math.floor(stateRef.current.distance / 10);
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      {/* HUD row */}
-      <div className="flex items-center justify-between w-full max-w-[800px] font-[family-name:var(--font-mono)] text-2xl">
+    <div className={`flex flex-col items-center gap-2 sm:gap-3 w-full ${inAnyFullscreen ? "fixed inset-0 z-[90] bg-black justify-center pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" : ""}`}>
+      {/* HUD row — compact on mobile */}
+      <div className={`flex items-center justify-between w-full font-[family-name:var(--font-mono)] text-base sm:text-2xl px-1 ${inAnyFullscreen ? "max-w-[min(100vw,160vh)]" : "max-w-[800px]"}`}>
         <span>
           <span className="text-[var(--muted)]">SCORE </span>
           <span className="text-[var(--crt-green)]">
             {String(score).padStart(5, "0")}
           </span>
         </span>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Lives */}
           {started && difficulty === "easy" && (
-            <span className="text-base">
+            <span className="text-sm sm:text-base">
               {Array.from({ length: Math.min(lives, MAX_LIVES_EASY) }, (_, i) => (
                 <span key={`f${i}`} className="text-[#d63d3d]">♥</span>
               ))}
@@ -1351,7 +1414,7 @@ export default function HelicopterGame() {
           )}
           {/* Combo */}
           {comboMultiplier > 1 && (
-            <span className="text-base px-2 py-0.5 rounded bg-[#ff8a3d22] text-[#ff8a3d]">
+            <span className="text-sm sm:text-base px-2 py-0.5 rounded bg-[#ff8a3d22] text-[#ff8a3d]">
               ×{comboMultiplier}
             </span>
           )}
@@ -1388,52 +1451,54 @@ export default function HelicopterGame() {
       <div
         ref={fullscreenRef}
         className={
-          isFullscreen
-            ? "fixed inset-0 z-50 bg-black flex items-center justify-center"
-            : "relative w-full max-w-[800px]"
+          inAnyFullscreen
+            ? "relative w-full flex-1 min-h-0 flex items-center justify-center bg-black touch-none select-none"
+            : "relative w-full max-w-[800px] touch-none select-none"
         }
-        style={isFullscreen ? undefined : { aspectRatio: `${WIDTH}/${HEIGHT}` }}
-        onMouseDown={() => {
+        style={inAnyFullscreen ? undefined : { aspectRatio: `${WIDTH}/${HEIGHT}` }}
+        onPointerDown={(e) => {
+          // Ignore UI chrome (buttons) — only canvas/stage lifts.
+          if ((e.target as HTMLElement).closest("button")) return;
           if (stateRef.current.paused) return;
           if (!started || gameOver) return;
+          try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* */ }
           stateRef.current.holding = true;
         }}
-        onMouseUp={() => (stateRef.current.holding = false)}
-        onMouseLeave={() => (stateRef.current.holding = false)}
-        onTouchStart={(e) => {
-          e.preventDefault();
-          if (stateRef.current.paused) return;
-          if (!started || gameOver) return;
-          stateRef.current.holding = true;
-        }}
-        onTouchEnd={() => (stateRef.current.holding = false)}
+        onPointerUp={() => { stateRef.current.holding = false; }}
+        onPointerCancel={() => { stateRef.current.holding = false; }}
+        onPointerLeave={() => { stateRef.current.holding = false; }}
       >
         <canvas
           ref={canvasRef}
           width={WIDTH}
           height={HEIGHT}
           className={
-            isFullscreen
-              ? "max-w-full max-h-full rounded-none border-0 cursor-pointer touch-none"
+            inAnyFullscreen
+              ? "rounded-none border-0 cursor-pointer touch-none max-w-full max-h-full"
               : "w-full h-full rounded border-2 border-[var(--border)] cursor-pointer touch-none"
           }
           style={
-            isFullscreen
-              ? { width: "auto", height: "auto", aspectRatio: `${WIDTH}/${HEIGHT}`, maxWidth: "100vw", maxHeight: "100vh" }
-              : undefined
+            inAnyFullscreen
+              ? {
+                  width: "min(100vw, calc(100vh * 2))",
+                  height: "min(100vh, calc(100vw * 0.5))",
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                  aspectRatio: `${WIDTH}/${HEIGHT}`,
+                }
+              : { display: "block", width: "100%", height: "100%" }
           }
         />
 
-        {/* Floating control buttons (visible on touch screens; harmless on desktop).
-            Sit on top of the canvas; stop click propagation so they don't trigger fly-up. */}
+        {/* Floating control buttons — large touch targets for mobile. */}
         {started && !gameOver && (
-          <div className="absolute top-2 right-2 flex gap-2 z-20 pointer-events-none">
+          <div className="absolute top-2 right-2 sm:top-3 sm:right-3 flex gap-2 z-20 pointer-events-none pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)]">
             <button
               type="button"
               aria-label={paused ? "Resume" : "Pause"}
-              className="pointer-events-auto pixel-edge px-2 py-1 rounded bg-black/55 text-[var(--foreground)] font-[family-name:var(--font-mono)] text-sm hover:bg-black/75 active:scale-95 transition select-none"
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              className="pointer-events-auto pixel-edge min-w-11 min-h-11 px-3 py-2 rounded bg-black/60 text-[var(--foreground)] font-[family-name:var(--font-mono)] text-base hover:bg-black/75 active:scale-95 transition select-none"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
                 const newPaused = !stateRef.current.paused;
@@ -1444,12 +1509,11 @@ export default function HelicopterGame() {
             >{paused ? "▶" : "❚❚"}</button>
             <button
               type="button"
-              aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-              className="pointer-events-auto pixel-edge px-2 py-1 rounded bg-black/55 text-[var(--foreground)] font-[family-name:var(--font-mono)] text-sm hover:bg-black/75 active:scale-95 transition select-none"
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              aria-label={inAnyFullscreen ? "Exit fullscreen" : "Fullscreen"}
+              className="pointer-events-auto pixel-edge min-w-11 min-h-11 px-3 py-2 rounded bg-black/60 text-[var(--foreground)] font-[family-name:var(--font-mono)] text-base hover:bg-black/75 active:scale-95 transition select-none"
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
-            >{isFullscreen ? "⤓" : "⛶"}</button>
+            >{inAnyFullscreen ? "⤓" : "⛶"}</button>
           </div>
         )}
 
@@ -1464,8 +1528,8 @@ export default function HelicopterGame() {
 
         {/* Start / Game Over overlay */}
         {(!started || gameOver) && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 rounded p-4">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-[var(--accent)] mb-3">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 rounded p-3 sm:p-4 overflow-y-auto">
+            <h2 className="font-[family-name:var(--font-display)] text-base sm:text-lg text-[var(--accent)] mb-3">
               {gameOver ? "CRASHED" : "HELICOPTER"}
             </h2>
             {gameOver && (
@@ -1499,43 +1563,43 @@ export default function HelicopterGame() {
                 )}
               </div>
             )}
-            {/* Difficulty buttons */}
-            <div className="flex gap-3 items-center">
+            {/* Difficulty buttons — 44px+ touch targets */}
+            <div className="flex flex-wrap gap-2 sm:gap-3 items-center justify-center">
               <button
                 onClick={() => resetGame("easy")}
-                className="pixel-edge px-4 py-2 rounded bg-[#7fd650] text-[var(--background)] font-[family-name:var(--font-display)] text-xs"
+                className="pixel-edge min-h-11 min-w-[5.5rem] px-4 py-2 rounded bg-[#7fd650] text-[var(--background)] font-[family-name:var(--font-display)] text-xs"
               >
                 EASY
               </button>
               <button
                 onClick={() => resetGame("hard")}
-                className="pixel-edge px-4 py-2 rounded bg-[#d63d3d] text-[var(--foreground)] font-[family-name:var(--font-display)] text-xs"
+                className="pixel-edge min-h-11 min-w-[5.5rem] px-4 py-2 rounded bg-[#d63d3d] text-[var(--foreground)] font-[family-name:var(--font-display)] text-xs"
               >
                 HARD
               </button>
               <button
                 onClick={toggleFullscreen}
-                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                className="pixel-edge px-3 py-2 rounded bg-[var(--surface-2)] text-[var(--foreground)] font-[family-name:var(--font-mono)] text-base"
+                aria-label={inAnyFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                className="pixel-edge min-h-11 min-w-11 px-3 py-2 rounded bg-[var(--surface-2)] text-[var(--foreground)] font-[family-name:var(--font-mono)] text-base"
               >
-                {isFullscreen ? "⤓" : "⛶"}
+                {inAnyFullscreen ? "⤓" : "⛶"}
               </button>
             </div>
-            <div className="mt-2 font-[family-name:var(--font-mono)] text-sm text-[var(--muted)] text-center">
+            <div className="mt-2 font-[family-name:var(--font-mono)] text-xs sm:text-sm text-[var(--muted)] text-center px-2">
               <span className="text-[#7fd650]">EASY</span> = 3 lives + wider gaps
               <span className="mx-2">·</span>
               <span className="text-[#d63d3d]">HARD</span> = one hit death
             </div>
-            <p className="mt-3 font-[family-name:var(--font-mono)] text-base text-[var(--muted)] text-center">
-              hold SPACE or tap to fly · SPACE to {gameOver ? "restart" : "start"}<br />
-              <span className="text-xs">P to pause · grab gems · collect power-ups · reach new biomes</span>
+            <p className="mt-3 font-[family-name:var(--font-mono)] text-sm sm:text-base text-[var(--muted)] text-center px-2">
+              hold SPACE or tap/hold to fly · tap EASY/HARD to {gameOver ? "restart" : "start"}<br />
+              <span className="text-xs">P to pause · fullscreen button works on mobile · grab gems · reach new biomes</span>
             </p>
           </div>
         )}
       </div>
 
       {/* Settings bar */}
-      <div className="relative flex items-center gap-2 w-full max-w-[800px]">
+      <div className={`relative flex items-center gap-2 w-full px-1 ${inAnyFullscreen ? "max-w-[min(100vw,160vh)]" : "max-w-[800px]"}`}>
         <button
           onClick={() => setSettingsOpen(!settingsOpen)}
           className="font-[family-name:var(--font-mono)] text-lg text-[var(--muted)] hover:text-[var(--accent)] transition-colors px-1"

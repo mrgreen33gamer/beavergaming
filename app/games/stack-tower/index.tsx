@@ -200,7 +200,7 @@ export default function StackTower() {
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   useEffect(() => {

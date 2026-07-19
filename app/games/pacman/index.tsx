@@ -159,7 +159,7 @@ export default function Pacman() {
             st.dir = { ...st.nextDir };
           }
           let nx = Math.round(st.px) + st.dir.x;
-          let ny = Math.round(st.py) + st.dir.y;
+          const ny = Math.round(st.py) + st.dir.y;
           // tunnel wrap
           if (nx < 0) nx = COLS - 1;
           if (nx >= COLS) nx = 0;

@@ -19,6 +19,61 @@ export interface UseCartridgeResult {
 }
 
 /**
+ * Prefer the server economy API (authoritative rates + httpOnly session).
+ * Fall back to client Economy when offline or API is unavailable.
+ */
+async function postScore(
+  gameId: string,
+  score: number,
+): Promise<{ granted: number; balance: number; isRecord: boolean } | null> {
+  try {
+    const res = await fetch("/api/economy/score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ gameId, score }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as {
+      granted: number;
+      balance: number;
+      isRecord: boolean;
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function postEvent(
+  gameId: string,
+  name: string,
+): Promise<{ granted: number; balance: number } | null> {
+  try {
+    const res = await fetch("/api/economy/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ gameId, name }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as { granted: number; balance: number };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchServerBalance(): Promise<number | null> {
+  try {
+    const res = await fetch("/api/economy/balance", { credentials: "include" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { balance: number | null };
+    return typeof data.balance === "number" ? data.balance : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Adopting the platform from a canvas game is three lines:
  *
  *   const { host, highScore } = useCartridge("pong");
@@ -49,20 +104,21 @@ export function useCartridge(gameId: string): UseCartridgeResult {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [hs, bal] = await Promise.all([
+      const [hs, serverBal, clientBal] = await Promise.all([
         save.getHighScore(gameId),
+        fetchServerBalance(),
         economy.getBalance(),
       ]);
       if (!active) return;
       setHighScore(hs);
-      publishBalance(bal);
+      // Prefer server balance when the API is up.
+      publishBalance(serverBal ?? clientBal);
     })();
     return () => {
       active = false;
     };
   }, [gameId, save, economy, publishBalance]);
 
-  // Fan GameShell pause bus into host.onPause / onResume callbacks.
   useEffect(() => {
     return subscribeGamePause((paused) => {
       const list = paused ? pauseCbs.current : resumeCbs.current;
@@ -70,7 +126,7 @@ export function useCartridge(gameId: string): UseCartridgeResult {
         try {
           cb();
         } catch {
-          // Game callbacks must not break the shell.
+          // ignore game callback errors
         }
       }
     });
@@ -79,6 +135,16 @@ export function useCartridge(gameId: string): UseCartridgeResult {
   const reportScore = useCallback(
     (score: number) => {
       void (async () => {
+        const remote = await postScore(gameId, score);
+        if (remote) {
+          if (remote.isRecord) setHighScore(score);
+          setLastAward(remote.granted);
+          publishBalance(remote.balance);
+          // Mirror high score into client save for offline reads / legacy.
+          if (remote.isRecord) await save.setHighScore(gameId, score);
+          return;
+        }
+        // Offline / API down — client authority (Phase 1 fallback).
         const isRecord = await save.setHighScore(gameId, score);
         if (isRecord) setHighScore(score);
         const granted = await economy.applyScore(gameId, score);
@@ -91,8 +157,14 @@ export function useCartridge(gameId: string): UseCartridgeResult {
 
   const reportEvent = useCallback(
     (name: string, value?: number) => {
-      void value; // reserved for future weighted events
+      void value;
       void (async () => {
+        const remote = await postEvent(gameId, name);
+        if (remote) {
+          setLastAward(remote.granted);
+          publishBalance(remote.balance);
+          return;
+        }
         const granted = await economy.applyEvent(gameId, name);
         setLastAward(granted);
         if (granted > 0) publishBalance(await economy.getBalance());

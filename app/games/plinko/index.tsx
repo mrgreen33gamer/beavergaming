@@ -217,7 +217,7 @@ export default function Plinko() {
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [aimX, highCredits]);
 
   const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {

@@ -282,7 +282,7 @@ export default function BubbleShooter() {
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [highScore]);
 
   const onMove = (e: React.MouseEvent<HTMLCanvasElement>) => {

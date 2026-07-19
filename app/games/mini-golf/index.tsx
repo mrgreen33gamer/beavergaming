@@ -49,7 +49,7 @@ export default function MiniGolf() {
     const b = localStorage.getItem("minigolf-best-total");
     if (b) setBestTotal(parseInt(b, 10));
     loadHole(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   const loadHole = (i: number) => {
@@ -169,7 +169,7 @@ export default function MiniGolf() {
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [holeIdx]);
 
   const pos = (e: React.MouseEvent<HTMLCanvasElement>) => {
