@@ -3,8 +3,9 @@ import Image from "next/image";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import GameLibrary from "./components/GameLibrary";
+import GameCover from "./components/GameCover";
 import { getCardImage } from "@/lib/cardImage";
-import { getFeaturedGame } from "@/lib/games";
+import { games, getFeaturedGame, categories } from "@/lib/games";
 
 export default function Home() {
   const featured = getFeaturedGame();
@@ -13,73 +14,120 @@ export default function Home() {
   return (
     <>
       <Header activeCat="all" />
-      <main className="flex-1 max-w-6xl mx-auto px-6 py-8 w-full">
+      <main className="w-full flex-1">
         {/* Hero */}
-        <section className="mb-12">
-          <div className="rounded-lg overflow-hidden border border-[var(--border)] bg-[var(--surface)]">
-            <div className="grid sm:grid-cols-5">
-              <div className="sm:col-span-3 p-8 sm:p-10 flex flex-col justify-center">
-                <p className="t-label text-[var(--crt-green)] mb-3">
-                  &gt;&gt; Featured Game
-                </p>
-                <h2 className="t-display-xl text-[var(--foreground)] mb-4">
-                  {featured.title.toUpperCase()}
-                </h2>
-                <p className="t-body-lg text-[var(--muted)] mb-7 max-w-prose">
-                  {featured.blurb}
-                </p>
-                <div className="flex items-center gap-4 flex-wrap">
-                  <Link
-                    href={`/play/${featured.slug}`}
-                    className="pixel-edge t-display-sm inline-block px-7 py-3 rounded-lg text-[var(--background)] transition-all"
-                    style={{ background: featured.accent }}
-                  >
-                    ▶ PLAY NOW
-                  </Link>
-                  <span className="t-caption text-[var(--muted)]">
-                    {featured.controls}
-                  </span>
-                </div>
-              </div>
+        <section className="hero-band border-b border-[var(--border)]">
+          <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:py-20 lg:grid-cols-5 lg:items-center">
+            <div className="lg:col-span-3">
+              <p className="t-label mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[var(--crt-green)]">
+                <span className="flicker" aria-hidden="true">
+                  ●
+                </span>
+                {games.length} games · free forever
+              </p>
 
-              <div
-                className="crt sm:col-span-2 min-h-[220px] relative"
-                style={{
-                  background: `linear-gradient(135deg, ${featured.accent}33 0%, ${featured.accent}11 100%)`,
-                }}
-              >
-                {featuredArt ? (
-                  <Image
-                    src={`/game-cards/${featuredArt}`}
-                    alt=""
-                    fill
-                    priority
-                    sizes="(max-width: 640px) 100vw, 40vw"
-                    className="object-cover"
-                  />
-                ) : (
-                  <div className="tile-emoji-frame">
-                    <span
-                      className="text-[7rem]"
-                      style={{ filter: `drop-shadow(0 0 28px ${featured.accent})` }}
-                    >
-                      {featured.emoji}
-                    </span>
-                  </div>
-                )}
+              <h2 className="t-display-hero mb-5 text-[var(--foreground)]">
+                PLAY INSTANTLY.
+                <br />
+                <span className="text-[var(--accent)]">NO DOWNLOADS.</span>
+              </h2>
+
+              <p className="t-body-lg mb-8 max-w-xl text-[var(--muted)]">
+                A hand-built arcade of {games.length}{" "}
+                browser games. No installs, no paywalls, no account required —
+                press play and you&apos;re in.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-4">
+                <Link
+                  href={`/play/${featured.slug}`}
+                  className="cta t-display-sm rounded-lg px-8 py-4 text-[var(--background)]"
+                  style={{ background: featured.accent }}
+                >
+                  ▶ PLAY {featured.title.toUpperCase()}
+                </Link>
+                <Link
+                  href="/genre/arcade"
+                  className="t-body rounded-lg border border-[var(--border)] px-6 py-4 text-[var(--foreground)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                >
+                  Browse the library
+                </Link>
               </div>
             </div>
+
+            {/* Featured cover */}
+            <div className="lg:col-span-2">
+              <Link
+                href={`/play/${featured.slug}`}
+                className="game-tile group block overflow-hidden rounded-xl bg-[var(--surface-2)]"
+              >
+                <div className="crt relative aspect-video overflow-hidden">
+                  {featuredArt ? (
+                    <Image
+                      src={`/game-cards/${featuredArt}`}
+                      alt=""
+                      fill
+                      priority
+                      sizes="(max-width: 1024px) 90vw, 420px"
+                      className="object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+                    />
+                  ) : (
+                    <GameCover
+                      slug={featured.slug}
+                      emoji={featured.emoji}
+                      accent={featured.accent}
+                      size="hero"
+                    />
+                  )}
+                  <span className="t-label absolute left-3 top-3 rounded bg-[var(--crt-green)] px-2 py-0.5 text-[#1a0e0a]">
+                    Featured
+                  </span>
+                </div>
+                <div className="p-5">
+                  <h3 className="t-display-sm text-[var(--foreground)]">
+                    {featured.title.toUpperCase()}
+                  </h3>
+                  <p className="t-caption mt-2 text-[var(--muted)]">{featured.blurb}</p>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Stat band */}
+          <div className="border-t border-[var(--border)] bg-[var(--surface)]/60">
+            <dl className="mx-auto grid max-w-6xl grid-cols-2 px-6 sm:grid-cols-4">
+              {[
+                { k: String(games.length), v: "games" },
+                { k: String(categories.length), v: "genres" },
+                { k: "0", v: "downloads" },
+                { k: "0", v: "paywalls" },
+              ].map((s) => (
+                <div key={s.v} className="py-5 text-center">
+                  <dt className="t-display-md text-[var(--accent)]">{s.k}</dt>
+                  <dd className="t-caption mt-1 text-[var(--muted)]">{s.v}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </section>
 
-        <GameLibrary />
+        <div className="mx-auto max-w-6xl px-6 py-12">
+          <GameLibrary />
 
-        <section className="mt-14 text-center">
-          <p className="t-body text-[var(--muted)]">
-            <span className="text-[var(--crt-green)]">█</span> Tip: All games work
-            on desktop. Mobile support varies by game.
-          </p>
-        </section>
+          <section className="mt-16 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center">
+            <h2 className="t-display-md mb-3 text-[var(--foreground)]">KEEP YOUR TOKENS</h2>
+            <p className="t-body mx-auto mb-6 max-w-lg text-[var(--muted)]">
+              You earn B-Tokens as you play. Make a free account and they follow you to
+              any device — or keep playing as a guest, entirely up to you.
+            </p>
+            <Link
+              href="/register"
+              className="cta t-display-sm inline-block rounded-lg bg-[var(--accent)] px-7 py-3.5 text-[var(--background)]"
+            >
+              CREATE FREE ACCOUNT
+            </Link>
+          </section>
+        </div>
       </main>
       <Footer />
     </>
