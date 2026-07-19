@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import Asteroids from "@/app/games/asteroids";
+import Asteroids from "@/app/games/asteroids/index";
 
 describe("Asteroids platform migration", () => {
   beforeEach(() => localStorage.clear());

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import LightsOut from "@/app/games/lights-out";
+import LightsOut from "@/app/games/lights-out/index";
 
 describe("LightsOut platform migration", () => {
   beforeEach(() => localStorage.clear());

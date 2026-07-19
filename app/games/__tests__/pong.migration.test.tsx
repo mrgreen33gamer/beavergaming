@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import Pong from "@/app/games/pong";
+import Pong from "@/app/games/pong/index";
 
 describe("Pong platform migration", () => {
   beforeEach(() => localStorage.clear());
