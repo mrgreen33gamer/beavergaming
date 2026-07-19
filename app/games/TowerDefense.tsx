@@ -1,1 +1,1 @@
-export { default } from "./tower-defense";
+export { default } from "./tower-defense/index";

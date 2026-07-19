@@ -1,1 +1,1 @@
-export { default } from "./sokoban";
+export { default } from "./sokoban/index";

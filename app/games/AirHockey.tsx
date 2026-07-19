@@ -1,1 +1,1 @@
-export { default } from "./air-hockey";
+export { default } from "./air-hockey/index";

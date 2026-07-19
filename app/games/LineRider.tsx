@@ -1,1 +1,1 @@
-export { default } from "./line-rider";
+export { default } from "./line-rider/index";

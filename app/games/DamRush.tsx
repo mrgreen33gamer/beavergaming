@@ -1,1 +1,1 @@
-export { default } from "./dam-rush";
+export { default } from "./dam-rush/index";

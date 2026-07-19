@@ -1,1 +1,1 @@
-export { default } from "./mastermind";
+export { default } from "./mastermind/index";

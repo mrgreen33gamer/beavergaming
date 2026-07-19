@@ -3,96 +3,8 @@ import Link from "next/link";
 import Header from "@/app/components/Header";
 import Footer from "@/app/components/Footer";
 import { getGame, games } from "@/lib/games";
-import HelicopterGame from "@/app/games/HelicopterGame";
-import AppleShooter from "@/app/games/AppleShooter";
-import SnakeGame from "@/app/games/SnakeGame";
-import MemoryMatch from "@/app/games/MemoryMatch";
-import WhackAMole from "@/app/games/WhackAMole";
-import TankShooter from "@/app/games/TankShooter";
-import SpaceInvaders from "@/app/games/SpaceInvaders";
-import Galaga from "@/app/games/Galaga";
-import Pacman from "@/app/games/Pacman";
-import ZombieShooter from "@/app/games/ZombieShooter";
-import LineRider from "@/app/games/LineRider";
-import TowerDefense from "@/app/games/TowerDefense";
-import Pong from "@/app/games/Pong";
-import Breakout from "@/app/games/Breakout";
-import Game2048 from "@/app/games/Game2048";
-import Minesweeper from "@/app/games/Minesweeper";
-import Tetris from "@/app/games/Tetris";
-import Asteroids from "@/app/games/Asteroids";
-import DinoRunner from "@/app/games/DinoRunner";
-import Simon from "@/app/games/Simon";
-import Frogger from "@/app/games/Frogger";
-import ConnectFour from "@/app/games/ConnectFour";
-import DamRush from "@/app/games/DamRush";
-import LightsOut from "@/app/games/LightsOut";
-import Hangman from "@/app/games/Hangman";
-import Reversi from "@/app/games/Reversi";
-import Sokoban from "@/app/games/Sokoban";
-import LunarLander from "@/app/games/LunarLander";
-import Tron from "@/app/games/Tron";
-import MiniGolf from "@/app/games/MiniGolf";
-import SkyHop from "@/app/games/SkyHop";
-import MatchThree from "@/app/games/MatchThree";
-import BubbleShooter from "@/app/games/BubbleShooter";
-import SlidePuzzle from "@/app/games/SlidePuzzle";
-import Mastermind from "@/app/games/Mastermind";
-import WordSearch from "@/app/games/WordSearch";
-import Battleship from "@/app/games/Battleship";
-import StackTower from "@/app/games/StackTower";
-import Plinko from "@/app/games/Plinko";
-import AirHockey from "@/app/games/AirHockey";
-import MissileCommand from "@/app/games/MissileCommand";
-import Centipede from "@/app/games/Centipede";
-import Pipes from "@/app/games/Pipes";
-
-// Mapping from slug to component
-const gameComponents: Record<string, React.ComponentType> = {
-  "dam-rush": DamRush,
-  "tank-shooter": TankShooter,
-  helicopter: HelicopterGame,
-  "apple-shooter": AppleShooter,
-  snake: SnakeGame,
-  "memory-match": MemoryMatch,
-  "whack-a-mole": WhackAMole,
-  "space-invaders": SpaceInvaders,
-  galaga: Galaga,
-  pacman: Pacman,
-  "zombie-shooter": ZombieShooter,
-  "line-rider": LineRider,
-  "tower-defense": TowerDefense,
-  pong: Pong,
-  breakout: Breakout,
-  "2048": Game2048,
-  minesweeper: Minesweeper,
-  tetris: Tetris,
-  asteroids: Asteroids,
-  "dino-runner": DinoRunner,
-  simon: Simon,
-  frogger: Frogger,
-  "connect-four": ConnectFour,
-  "lights-out": LightsOut,
-  hangman: Hangman,
-  reversi: Reversi,
-  sokoban: Sokoban,
-  "lunar-lander": LunarLander,
-  tron: Tron,
-  "mini-golf": MiniGolf,
-  "sky-hop": SkyHop,
-  "match-three": MatchThree,
-  "bubble-shooter": BubbleShooter,
-  "slide-puzzle": SlidePuzzle,
-  mastermind: Mastermind,
-  "word-search": WordSearch,
-  battleship: Battleship,
-  "stack-tower": StackTower,
-  plinko: Plinko,
-  "air-hockey": AirHockey,
-  "missile-command": MissileCommand,
-  centipede: Centipede,
-  pipes: Pipes,
-};
+import GameFrame from "./GameFrame";
+import { gameLoaders } from "./gameRegistry";
 
 export async function generateStaticParams() {
   return games.map((g) => ({ slug: g.slug }));
@@ -105,9 +17,8 @@ export default async function PlayPage({
 }) {
   const { slug } = await params;
   const game = getGame(slug);
-  const GameComponent = gameComponents[slug];
 
-  if (!game || !GameComponent) {
+  if (!game || !(slug in gameLoaders)) {
     notFound();
   }
 
@@ -142,7 +53,7 @@ export default async function PlayPage({
 
         {/* Game canvas container */}
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4 crt">
-          <GameComponent />
+          <GameFrame slug={game.slug} title={game.title} accent={game.accent} />
         </div>
 
         {/* Description */}

@@ -1,1 +1,1 @@
-export { default } from "./bubble-shooter";
+export { default } from "./bubble-shooter/index";

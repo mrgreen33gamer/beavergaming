@@ -1,1 +1,1 @@
-export { default } from "./lights-out";
+export { default } from "./lights-out/index";

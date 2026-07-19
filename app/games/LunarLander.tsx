@@ -1,1 +1,1 @@
-export { default } from "./lunar-lander";
+export { default } from "./lunar-lander/index";

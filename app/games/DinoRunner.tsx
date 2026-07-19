@@ -1,1 +1,1 @@
-export { default } from "./dino-runner";
+export { default } from "./dino-runner/index";

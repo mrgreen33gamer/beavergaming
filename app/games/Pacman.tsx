@@ -1,1 +1,1 @@
-export { default } from "./pacman";
+export { default } from "./pacman/index";

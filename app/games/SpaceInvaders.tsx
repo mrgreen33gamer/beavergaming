@@ -1,1 +1,1 @@
-export { default } from "./space-invaders";
+export { default } from "./space-invaders/index";

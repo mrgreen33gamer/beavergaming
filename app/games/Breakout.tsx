@@ -1,1 +1,1 @@
-export { default } from "./breakout";
+export { default } from "./breakout/index";

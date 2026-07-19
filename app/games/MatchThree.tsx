@@ -1,1 +1,1 @@
-export { default } from "./match-three";
+export { default } from "./match-three/index";
