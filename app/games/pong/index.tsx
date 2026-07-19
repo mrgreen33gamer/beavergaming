@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const WIDTH = 600;
 const HEIGHT = 400;
@@ -16,6 +17,7 @@ export default function Pong() {
   const [gameOver, setGameOver] = useState(false);
   const [won, setWon] = useState(false);
   const [started, setStarted] = useState(false);
+  const { host } = useCartridge("pong");
 
   const s = useRef({
     py: HEIGHT / 2 - PADDLE_H / 2,
@@ -125,7 +127,9 @@ export default function Pong() {
   const checkEnd = (st: typeof s.current) => {
     if (st.pScore >= WIN_SCORE || st.aScore >= WIN_SCORE) {
       st.running = false;
-      setWon(st.pScore > st.aScore);
+      const playerWon = st.pScore > st.aScore;
+      setWon(playerWon);
+      if (playerWon) host.reportEvent("match_won");
       setGameOver(true);
     }
   };
