@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 500;
 const HEIGHT = 540;
 const BUBBLE_R = 18;
@@ -52,6 +54,12 @@ function buildGrid(initialRows: number): Grid {
 }
 
 export default function BubbleShooter() {
+  // Ref'd because endGame() is called from the canvas loop, which closes over
+  // its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("bubble-shooter");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -207,6 +215,7 @@ export default function BubbleShooter() {
       if (outcome === "win") st.score += 500;
       setScore(st.score);
       if (st.score > highScore) { setHighScore(st.score); localStorage.setItem("bubble-highscore", String(st.score)); }
+      hostRef.current.reportScore(st.score);
       setOver(outcome);
     };
 

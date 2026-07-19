@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const SIZE = 4;
 
 type Grid = number[][];
@@ -97,6 +99,12 @@ function canMove(g: Grid): boolean {
 }
 
 export default function Game2048() {
+  // Ref'd because doMove() is a memoised callback that closes over its first
+  // render — reading `host` directly there would go stale.
+  const { host } = useCartridge("2048");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [grid, setGrid] = useState<Grid>(emptyGrid);
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
@@ -104,6 +112,7 @@ export default function Game2048() {
   const [won, setWon] = useState(false);
   const gridRef = useRef<Grid>(emptyGrid());
   const overRef = useRef(false);
+  const scoreRef = useRef(0);
 
   useEffect(() => {
     const b = localStorage.getItem("2048-best");
@@ -118,6 +127,7 @@ export default function Game2048() {
     addRandomTile(g);
     gridRef.current = g;
     overRef.current = false;
+    scoreRef.current = 0;
     setGrid(clone(g));
     setScore(0);
     setOver(false);
@@ -131,13 +141,12 @@ export default function Game2048() {
     addRandomTile(moved);
     gridRef.current = moved;
     setGrid(clone(moved));
-    setScore((sc) => {
-      const ns = sc + gained;
-      if (ns > best) { setBest(ns); localStorage.setItem("2048-best", String(ns)); }
-      return ns;
-    });
+    const ns = scoreRef.current + gained;
+    scoreRef.current = ns;
+    setScore(ns);
+    if (ns > best) { setBest(ns); localStorage.setItem("2048-best", String(ns)); }
     if (!won && moved.some((row) => row.some((v) => v >= 2048))) setWon(true);
-    if (!canMove(moved)) { overRef.current = true; setOver(true); }
+    if (!canMove(moved)) { overRef.current = true; setOver(true); hostRef.current.reportScore(ns); }
   }, [best, won]);
 
   useEffect(() => {

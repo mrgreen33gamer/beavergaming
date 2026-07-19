@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 type Size = 3 | 4 | 5;
 
@@ -37,6 +39,12 @@ function isSolved(board: number[]): boolean {
 }
 
 export default function SlidePuzzle() {
+  // Ref'd because click() is reached from the keydown listener, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("slide-puzzle");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [size, setSize] = useState<Size>(4);
   const [board, setBoard] = useState<number[]>(() => shuffle(4));
   const [moves, setMoves] = useState(0);
@@ -83,6 +91,7 @@ export default function SlidePuzzle() {
         setBest(next);
         localStorage.setItem("slidepuzzle-best", JSON.stringify(next));
       }
+      hostRef.current.reportEvent("puzzle_solved");
     }
   };
 

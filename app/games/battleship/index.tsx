@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const SIZE = 10;
 const SHIPS: { name: string; length: number }[] = [
@@ -47,6 +49,12 @@ function placeShipsRandom(): { board: Cell[][]; ships: Ship[] } {
 }
 
 export default function Battleship() {
+  // Ref'd for consistency with the other cartridges — the fire handler is
+  // recreated each render, but the ref keeps the host stable either way.
+  const { host } = useCartridge("battleship");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [enemyBoard, setEnemyBoard] = useState<Cell[][]>(() => placeShipsRandom().board);
   const [enemyShips, setEnemyShips] = useState<Ship[]>([]);
   const [shots, setShots] = useState(0);
@@ -93,6 +101,7 @@ export default function Battleship() {
           setOver(true);
           const total = shots + 1;
           if (bestShots === null || total < bestShots) { setBestShots(total); localStorage.setItem("battleship-best", String(total)); }
+          hostRef.current.reportEvent("match_won");
         }
       } else {
         setLastShotInfo("HIT!");

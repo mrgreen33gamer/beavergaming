@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 480;
 const HEIGHT = 600;
 const CELL = 20;
@@ -17,6 +19,12 @@ type Bullet = { x: number; y: number };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string };
 
 export default function Centipede() {
+  // Ref'd because playerHit() is called from the canvas loop, which closes over
+  // its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("centipede");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -266,6 +274,7 @@ export default function Centipede() {
       st.running = false;
       const final = st.score;
       if (final > highScore) { setHighScore(final); localStorage.setItem("centipede-high", String(final)); }
+      hostRef.current.reportScore(final);
       setOver(true);
     } else {
       // Push centipede back up slightly so player can recover

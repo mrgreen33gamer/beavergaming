@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const SIZE = 8;
 const COLORS = ["#d63d3d", "#7fd650", "#5fc8e0", "#ffd060", "#c45ed6", "#ff8a3d"];
 const GLYPHS = ["♥", "♣", "◆", "★", "♠", "●"];
@@ -74,6 +76,12 @@ function gravity(g: Grid): boolean {
 }
 
 export default function MatchThree() {
+  // Ref'd because endGame() fires from a deferred timeout, which closes over an
+  // earlier render — reading `host` directly there would go stale.
+  const { host } = useCartridge("match-three");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [grid, setGrid] = useState<Grid>(newGrid);
   const [selected, setSelected] = useState<{ r: number; c: number } | null>(null);
   const [score, setScore] = useState(0);
@@ -83,8 +91,10 @@ export default function MatchThree() {
   const [busy, setBusy] = useState(false);
   const [popping, setPopping] = useState<Set<string>>(new Set());
   const gridRef = useRef<Grid>(grid);
+  const scoreRef = useRef(score);
 
   useEffect(() => { gridRef.current = grid; }, [grid]);
+  useEffect(() => { scoreRef.current = score; }, [score]);
   useEffect(() => {
     const b = localStorage.getItem("match3-highscore");
     if (b) setHighScore(parseInt(b, 10));
@@ -167,6 +177,7 @@ export default function MatchThree() {
       if (s > highScore) { setHighScore(s); localStorage.setItem("match3-highscore", String(s)); }
       return s;
     });
+    hostRef.current.reportScore(scoreRef.current);
   };
 
   return (

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const COLS = 9;
 const ROWS = 7;
@@ -81,6 +83,12 @@ function generatePuzzle(): { grid: Cell[][]; startR: number; startC: number; end
 }
 
 export default function Pipes() {
+  // Ref'd because the win check runs inside the flow interval, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("pipes");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [puzzle, setPuzzle] = useState<{ grid: Cell[][]; startR: number; startC: number; endR: number; endC: number }>(() => generatePuzzle());
   const [filledCells, setFilledCells] = useState<Set<string>>(new Set());
   const [phase, setPhase] = useState<"setup" | "flowing" | "won" | "lost">("setup");
@@ -143,6 +151,7 @@ export default function Pipes() {
             if (next.has(endKey)) {
               setPhase("won");
               if (level + 1 > bestLevel) { setBestLevel(level + 1); localStorage.setItem("pipes-best-level", String(level + 1)); }
+              hostRef.current.reportEvent("level_cleared");
             } else setPhase("lost");
           }, 200);
         }

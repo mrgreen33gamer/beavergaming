@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const TILE = 40;
 const COLS = 15;
 const ROWS = 10;
@@ -33,6 +35,12 @@ const pathTiles = new Set<string>();
 })();
 
 export default function TowerDefense() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("tower-defense");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [money, setMoney] = useState(150);
   const [lives, setLives] = useState(20);
@@ -287,6 +295,7 @@ export default function TowerDefense() {
       setHighScore(finalScore);
       localStorage.setItem("td-highscore", String(finalScore));
     }
+    hostRef.current.reportScore(finalScore);
     setGameOver(true);
   };
 

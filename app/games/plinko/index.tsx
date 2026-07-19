@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 480;
 const HEIGHT = 580;
 const PEG_R = 4;
@@ -28,6 +30,12 @@ type Puck = { x: number; y: number; vx: number; vy: number; bet: number; landed:
 type FX = { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string };
 
 export default function Plinko() {
+  // Ref'd because the peak is tracked inside the canvas loop, which closes over
+  // its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("plinko");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [credits, setCredits] = useState(100);
   const [highCredits, setHighCredits] = useState(100);
@@ -43,6 +51,7 @@ export default function Plinko() {
     slotW: 0,
     aimPulse: 0,
     lastDrop: 0,
+    peak: 100,        // highest credit total this run — the run's score
   });
 
   // Generate pegs in a triangular field
@@ -134,6 +143,7 @@ export default function Plinko() {
           const win = puck.bet * slot.mult;
           setCredits((c) => {
             const nc = c + win;
+            if (nc > st.peak) st.peak = nc;
             if (nc > highCredits) { setHighCredits(nc); localStorage.setItem("plinko-best-credits", String(nc)); }
             return nc;
           });
@@ -226,7 +236,17 @@ export default function Plinko() {
     setAimX(Math.max(40, Math.min(WIDTH - 40, x)));
   };
 
-  const reset = () => { setCredits(100); setLastWin(null); };
+  // Running out of credits is the only real end of a run, so report there.
+  // Guarded by a ref so a re-render at zero credits can't report twice.
+  const reportedBust = useRef(false);
+  useEffect(() => {
+    if (credits >= 1) { reportedBust.current = false; return; }
+    if (reportedBust.current) return;
+    reportedBust.current = true;
+    hostRef.current.reportScore(s.current.peak);
+  }, [credits]);
+
+  const reset = () => { setCredits(100); setLastWin(null); s.current.peak = 100; };
 
   return (
     <div className="flex flex-col items-center gap-3">

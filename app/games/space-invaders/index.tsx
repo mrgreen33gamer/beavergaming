@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 600;
 const HEIGHT = 460;
 const PLAYER_W = 34;
@@ -21,6 +23,12 @@ type Bullet = { x: number; y: number };
 type Alien = { x: number; y: number; alive: boolean; row: number };
 
 export default function SpaceInvaders() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("space-invaders");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -248,6 +256,7 @@ export default function SpaceInvaders() {
       setHighScore(finalScore);
       localStorage.setItem("invaders-highscore", String(finalScore));
     }
+    hostRef.current.reportScore(finalScore);
     setGameOver(true);
   };
 

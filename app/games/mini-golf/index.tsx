@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 640;
 const HEIGHT = 460;
 const BALL_R = 7;
@@ -24,6 +26,12 @@ const COURSE: Hole[] = [
 ];
 
 export default function MiniGolf() {
+  // Ref'd because the hole-sunk handler runs inside the canvas loop, which
+  // closes over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("mini-golf");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [holeIdx, setHoleIdx] = useState(0);
   const [strokes, setStrokes] = useState(0);
@@ -106,6 +114,7 @@ export default function MiniGolf() {
           st.total += st.strokes; st.totalPar += h.par;
           setTotal(st.total); setTotalPar(st.totalPar);
           setHoled(true);
+          hostRef.current.reportEvent("level_cleared");
         }
         // Stop if very slow
         if (sp < MIN_VEL) { st.bvx = 0; st.bvy = 0; st.rolling = false; }

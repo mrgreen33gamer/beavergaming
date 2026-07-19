@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 380;
 const HEIGHT = 560;
 const BLOCK_H = 26;
@@ -13,6 +15,12 @@ type Block = { x: number; w: number; y: number; color: string };
 const COLORS = ["#ff6b1a", "#ff8a3d", "#ffd060", "#7fd650", "#5fc8e0", "#c45ed6", "#ff5050", "#ffa030"];
 
 export default function StackTower() {
+  // Ref'd because drop() is wired into handlers that close over their first
+  // render — reading `host` directly there would go stale.
+  const { host } = useCartridge("stack-tower");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -78,6 +86,7 @@ export default function StackTower() {
       const final = st.score;
       setScore(final);
       if (final > highScore) { setHighScore(final); localStorage.setItem("stacktower-high", String(final)); }
+      hostRef.current.reportScore(final);
       setTimeout(() => setGameOver(true), 600);
       return;
     }

@@ -23,6 +23,7 @@ import {
   drawHammer, drawImpactFlash, drawFreezeOverlay, drawScreenFlash,
   drawParticles, drawFloatingTexts, holeCenter,
 } from "./drawing";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const DEFAULT_DEATH: DeathStats = {
   mode: "classic", score: 0, hits: 0, misses: 0, accuracy: 0,
@@ -32,6 +33,12 @@ const DEFAULT_DEATH: DeathStats = {
 const N_HOLES = HOLE_COLS * HOLE_ROWS;
 
 export default function WhackAMole() {
+  // Ref'd because endGame() runs inside the canvas loop, which closes over its
+  // first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("whack-a-mole");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = useState<Mode | null>(null);
   const [score, setScore] = useState(0);
@@ -520,6 +527,7 @@ export default function WhackAMole() {
       localStorage.setItem(HIGHSCORE_KEY[s.mode], String(s.score));
       setHighScores((prev) => ({ ...prev, [s.mode]: s.score }));
     }
+    hostRef.current.reportScore(s.score);
   };
 
   // ===== Helper: spawn a floating text =====

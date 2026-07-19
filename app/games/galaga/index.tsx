@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 600;
 const HEIGHT = 460;
 const PLAYER_W = 30;
@@ -29,6 +31,12 @@ type Enemy = {
 };
 
 export default function Galaga() {
+  // Ref'd because die() is called from the canvas loop, which closes over its
+  // first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("galaga");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -259,6 +267,7 @@ export default function Galaga() {
       setHighScore(finalScore);
       localStorage.setItem("galaga-highscore", String(finalScore));
     }
+    hostRef.current.reportScore(finalScore);
     setGameOver(true);
   };
 

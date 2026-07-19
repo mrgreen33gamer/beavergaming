@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isMuted as platformMuted } from "@/lib/platform/audio";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const PADS = [
   { id: 0, color: "#7fd650", lit: "#b8f088", freq: 330 },
@@ -11,6 +12,12 @@ const PADS = [
 ];
 
 export default function Simon() {
+  // Ref'd because handlePad() is reached from timer-driven callbacks, which
+  // close over their first render — reading `host` directly would go stale.
+  const { host } = useCartridge("simon");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [sequence, setSequence] = useState<number[]>([]);
   const [active, setActive] = useState<number | null>(null);
   const [round, setRound] = useState(0);
@@ -97,6 +104,8 @@ export default function Simon() {
       setGameOver(true);
       setPlaying(false);
       beep(110, 0.5);
+      // Endless memory game — the round reached is the score.
+      hostRef.current.reportScore(sequence.length);
     }
   };
 

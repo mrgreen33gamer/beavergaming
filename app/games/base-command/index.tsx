@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 import type {
   Building, Unit, Enemy, Bullet, Particle, FloatingText,
   Phase, Vec, EnemyType, BuildingType, Ability, AirstrikeTarget,
@@ -54,6 +57,12 @@ function getTimeOfDay(wave: number): TimeOfDay {
 }
 
 export default function BaseCommand() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("tank-shooter");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -705,6 +714,7 @@ export default function BaseCommand() {
 
         if (triggerGameOver) {
           const cleared = s.wave;
+          hostRef.current.reportScore(cleared);
           setTimeout(() => {
             setPhase("gameover");
             setBaseHp(s.baseHp);

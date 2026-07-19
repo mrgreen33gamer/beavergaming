@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const EMOJI_POOL = ["🦫", "🚁", "🏹", "🐍", "🃏", "🔨", "🎮", "🕹️", "🎯", "🎲", "🚀", "🎨", "💎", "⚡", "🍀", "🔥", "🎪", "🎰"];
 
@@ -44,6 +46,13 @@ function starsForScore(moves: number, pairs: number): number {
 }
 
 export default function MemoryMatch() {
+  // Ref'd because the win effect re-runs whenever `cards` changes, so it must
+  // not close over a stale host — and a flag keeps the report to once per board.
+  const { host } = useCartridge("memory-match");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+  const reportedRef = useRef(false);
+
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [moves, setMoves] = useState(0);
@@ -82,6 +91,10 @@ export default function MemoryMatch() {
         else setBestHard(moves);
         localStorage.setItem(key, String(moves));
       }
+      if (!reportedRef.current) {
+        reportedRef.current = true;
+        hostRef.current.reportEvent("puzzle_solved");
+      }
     }
   }, [cards, moves, bestEasy, bestHard, difficulty]);
 
@@ -96,6 +109,7 @@ export default function MemoryMatch() {
   }, [cards]);
 
   const startGame = (diff: Difficulty) => {
+    reportedRef.current = false;
     setDifficulty(diff);
     setCards(makeDeck(diff));
     setMoves(0);

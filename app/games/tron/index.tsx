@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const COLS = 60;
 const ROWS = 44;
 const CELL = 10;
@@ -14,6 +16,12 @@ const UP = { x: 0, y: -1 }, DOWN = { x: 0, y: 1 }, LEFT = { x: -1, y: 0 }, RIGHT
 type Bike = { x: number; y: number; dir: Dir; trail: { x: number; y: number }[]; alive: boolean; color: string; trailColor: string };
 
 export default function Tron() {
+  // Ref'd because the round-end handler runs inside the canvas loop, which
+  // closes over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("tron");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
@@ -123,7 +131,7 @@ export default function Tron() {
         st.running = false;
         if (pDead && aDead) { setWinner("tie"); }
         else if (pDead) { setWinner("ai"); const l = losses + 1; setLosses(l); localStorage.setItem("tron-losses", String(l)); }
-        else { setWinner("player"); const w = wins + 1; setWins(w); localStorage.setItem("tron-wins", String(w)); setRound((r) => r + 1); }
+        else { setWinner("player"); const w = wins + 1; setWins(w); localStorage.setItem("tron-wins", String(w)); setRound((r) => r + 1); hostRef.current.reportEvent("match_won"); }
       }
     };
 
