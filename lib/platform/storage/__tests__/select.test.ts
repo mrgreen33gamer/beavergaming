@@ -18,8 +18,12 @@ describe("selectAdapter", () => {
 });
 
 describe("MongoAdapter", () => {
-  it("throws a clear not-implemented error", async () => {
-    const adapter = new MongoAdapter();
-    await expect(adapter.get("save", "k")).rejects.toThrow(/Phase 2/);
+  it("requires a URI", () => {
+    expect(() => new MongoAdapter("")).toThrow(/MONGODB_URI/);
+  });
+
+  it("accepts an explicit URI without connecting until used", () => {
+    const adapter = new MongoAdapter("mongodb+srv://example.mongodb.net", "beavergaming");
+    expect(adapter).toBeInstanceOf(MongoAdapter);
   });
 });

@@ -12,9 +12,12 @@ let cachedAdapter: StorageAdapter | null = null;
 
 function getServerAdapter(): StorageAdapter {
   if (cachedAdapter) return cachedAdapter;
-  const uri = process.env.MONGODB_URI;
+  const uri = process.env.MONGODB_URI?.trim();
   if (uri) {
-    cachedAdapter = selectAdapter({ MONGODB_URI: uri });
+    cachedAdapter = selectAdapter({
+      MONGODB_URI: uri,
+      MONGODB_DB: process.env.MONGODB_DB ?? "beavergaming",
+    });
   } else {
     cachedAdapter = new MemoryAdapter();
   }
