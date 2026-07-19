@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 // Tile chars: # wall, . floor, $ crate, * crate-on-target, @ player, + player-on-target, x target, space outside
 const LEVELS: string[][] = [
@@ -99,6 +101,12 @@ function isWon(g: Grid): boolean {
 }
 
 export default function Sokoban() {
+  // Ref'd because tryMove() is reached from the keydown listener, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("sokoban");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [levelIdx, setLevelIdx] = useState(0);
   const [grid, setGrid] = useState<Grid>(() => parseLevel(LEVELS[0]));
   const [history, setHistory] = useState<Grid[]>([]);
@@ -143,6 +151,7 @@ export default function Sokoban() {
     if (isWon(next)) {
       setWon(true);
       if (levelIdx + 1 > bestLevel) { setBestLevel(levelIdx + 1); localStorage.setItem("sokoban-best", String(levelIdx + 1)); }
+      hostRef.current.reportEvent("level_cleared");
     }
   };
 

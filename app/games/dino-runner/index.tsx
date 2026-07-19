@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 600;
 const HEIGHT = 240;
 const GROUND_Y = 200;
@@ -14,6 +16,12 @@ const JUMP_V = -11.5;
 type Obstacle = { x: number; w: number; h: number; bird: boolean; y: number };
 
 export default function DinoRunner() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("dino-runner");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -180,6 +188,7 @@ export default function DinoRunner() {
     const sc = Math.floor(st.score);
     setScore(sc);
     if (sc > highScore) { setHighScore(sc); localStorage.setItem("dino-highscore", String(sc)); }
+    hostRef.current.reportScore(sc);
     setGameOver(true);
   };
 

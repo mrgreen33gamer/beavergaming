@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 import type {
   Arrow, Apple, AppleChunk, JuiceParticle, FloatingText, GrassBlade, Mood,
 } from "./types";
@@ -26,6 +28,12 @@ import {
 } from "./drawing";
 
 export default function AppleShooter() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("apple-shooter");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [level, setLevel] = useState(1);
   const [shots, setShots] = useState(3);
@@ -335,6 +343,7 @@ export default function AppleShooter() {
           s.shake = SHAKE_FRIEND_HIT;
           setMessage("OH NO! You hit your friend.");
           setMood("flinch", 5000);
+          hostRef.current.reportScore(s.score);
           setTimeout(() => setGameOver(true), 700);
           return;
         }
@@ -360,6 +369,7 @@ export default function AppleShooter() {
           const left = (3 - s.levelArrowsUsed);
           if (left <= 0) {
             setMessage("Out of arrows!");
+            hostRef.current.reportScore(s.score);
             setTimeout(() => setGameOver(true), 500);
           } else {
             setMessage(`${left} ${left === 1 ? "arrow" : "arrows"} left`);

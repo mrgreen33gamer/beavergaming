@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 360;
 const HEIGHT = 540;
 const PLAYER_W = 28;
@@ -19,6 +21,12 @@ const PLAT_W = 60;
 const PLAT_H = 10;
 
 export default function SkyHop() {
+  // Ref'd because die() is called from the canvas loop, which closes over its
+  // first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("sky-hop");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -242,6 +250,7 @@ export default function SkyHop() {
     const final = Math.floor(st.score);
     setScore(final);
     if (final > highScore) { setHighScore(final); localStorage.setItem("skyhop-highscore", String(final)); }
+    hostRef.current.reportScore(final);
     setGameOver(true);
   };
 

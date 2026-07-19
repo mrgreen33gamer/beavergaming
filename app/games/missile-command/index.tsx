@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 640;
 const HEIGHT = 480;
 const GROUND_Y = HEIGHT - 30;
@@ -21,6 +23,12 @@ type City = { x: number; alive: boolean };
 type Battery = { x: number; ammo: number };
 
 export default function MissileCommand() {
+  // Ref'd because endGame() is called from the canvas loop, which closes over
+  // its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("missile-command");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -308,6 +316,7 @@ export default function MissileCommand() {
     st.running = false;
     const final = st.score; setScore(final);
     if (final > highScore) { setHighScore(final); localStorage.setItem("missilecmd-high", String(final)); }
+    hostRef.current.reportScore(final);
     setOver(true);
   };
 

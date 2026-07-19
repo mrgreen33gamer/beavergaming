@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const SIZE = 8;
 // 0 = empty, 1 = black (player), 2 = white (AI)
@@ -73,6 +75,12 @@ function aiPick(board: Board): { r: number; c: number; flips: [number, number][]
 }
 
 export default function Reversi() {
+  // Ref'd because endGame() is reached from the AI's setTimeout chain, which
+  // closes over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("reversi");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [board, setBoard] = useState<Board>(initialBoard);
   const [turn, setTurn] = useState<1 | 2>(1);
   const [over, setOver] = useState(false);
@@ -122,7 +130,7 @@ export default function Reversi() {
   const endGame = (b: Board) => {
     setOver(true);
     const { p1, p2 } = score(b);
-    if (p1 > p2) { setMsg(`You win! ${p1} – ${p2}`); const w = wins + 1; setWins(w); localStorage.setItem("reversi-wins", String(w)); }
+    if (p1 > p2) { setMsg(`You win! ${p1} – ${p2}`); const w = wins + 1; setWins(w); localStorage.setItem("reversi-wins", String(w)); hostRef.current.reportEvent("match_won"); }
     else if (p2 > p1) setMsg(`AI wins. ${p1} – ${p2}`);
     else setMsg(`Tie ${p1} – ${p2}`);
   };

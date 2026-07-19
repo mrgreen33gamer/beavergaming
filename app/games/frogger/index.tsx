@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const COLS = 13;
 const ROWS = 13;
 const CELL = 36;
@@ -116,6 +118,12 @@ function homeSlotCenterX(idx: number): number {
 }
 
 export default function Frogger() {
+  // Ref'd because loseLife() is called from the canvas loop, which closes over
+  // its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("frogger");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -182,6 +190,7 @@ export default function Frogger() {
       st.running = false;
       setScore(st.score);
       if (st.score > highScore) { setHighScore(st.score); localStorage.setItem("frogger-highscore", String(st.score)); }
+      hostRef.current.reportScore(st.score);
       setGameOver(true);
     } else {
       respawn(st);

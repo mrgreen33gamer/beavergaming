@@ -46,7 +46,9 @@ export class Economy {
 
   /** Grant a flat reward for a known event. Unknown events grant nothing. */
   async applyEvent(gameId: string, event: string): Promise<number> {
-    const wanted = rewardForEvent(event);
+    // gameId selects the per-game override — "level_cleared" is worth far
+    // less in a game that clears eight levels a run than in one that clears one.
+    const wanted = rewardForEvent(event, gameId);
     return this.grant(gameId, wanted, "event");
   }
 

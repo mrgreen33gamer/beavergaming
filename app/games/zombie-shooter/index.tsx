@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 600;
 const HEIGHT = 460;
 const PLAYER_R = 12;
@@ -15,6 +17,12 @@ type Zombie = Vec & { hp: number; speed: number; hurt: number };
 type Particle = Vec & { vx: number; vy: number; life: number; maxLife: number; color: string };
 
 export default function ZombieShooter() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("zombie-shooter");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -256,6 +264,7 @@ export default function ZombieShooter() {
       setHighScore(finalScore);
       localStorage.setItem("zombie-highscore", String(finalScore));
     }
+    hostRef.current.reportScore(finalScore);
     setGameOver(true);
   };
 

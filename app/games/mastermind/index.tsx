@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const COLORS = ["#d63d3d", "#ffd060", "#7fd650", "#5fc8e0", "#c45ed6", "#ff8a3d"];
 const SLOTS = 4;
@@ -30,6 +32,12 @@ function scoreGuess(guess: number[], code: number[]): { black: number; white: nu
 type Row = { guess: number[]; black: number; white: number };
 
 export default function Mastermind() {
+  // Ref'd so the report always reaches the current host, never a stale one
+  // captured by an earlier render's closure.
+  const { host } = useCartridge("mastermind");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [code, setCode] = useState<number[]>(generateCode);
   const [rows, setRows] = useState<Row[]>([]);
   const [current, setCurrent] = useState<(number | null)[]>(Array(SLOTS).fill(null));
@@ -85,6 +93,7 @@ export default function Mastermind() {
     if (sc.black === SLOTS) {
       setWon(true);
       const w = wins + 1; setWins(w); localStorage.setItem("mastermind-wins", String(w));
+      hostRef.current.reportEvent("puzzle_solved");
     } else if (newRows.length >= MAX_GUESSES) {
       setLost(true);
     }

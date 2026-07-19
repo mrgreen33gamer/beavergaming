@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const COLS = 7;
 const ROWS = 6;
 // 0 = empty, 1 = player (red), 2 = AI (yellow)
@@ -79,6 +81,12 @@ function aiMove(board: Board): number {
 }
 
 export default function ConnectFour() {
+  // Ref'd because finish() is reached from the AI's setTimeout callback, which
+  // closes over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("connect-four");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [board, setBoard] = useState<Board>(emptyBoard);
   const [turn, setTurn] = useState<1 | 2>(1);
   const [winner, setWinner] = useState<0 | 1 | 2 | 3>(0); // 3 = draw
@@ -106,7 +114,7 @@ export default function ConnectFour() {
 
   const finish = (w: 0 | 1 | 2 | 3) => {
     setWinner(w);
-    if (w === 1) { setWins((x) => { const n = x + 1; localStorage.setItem("connect4-wins", String(n)); return n; }); }
+    if (w === 1) { setWins((x) => { const n = x + 1; localStorage.setItem("connect4-wins", String(n)); return n; }); hostRef.current.reportEvent("match_won"); }
     if (w === 2) { setLosses((x) => { const n = x + 1; localStorage.setItem("connect4-losses", String(n)); return n; }); }
   };
 

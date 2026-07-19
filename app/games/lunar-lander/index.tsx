@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 600;
 const HEIGHT = 460;
 const GRAVITY = 0.06;
@@ -113,6 +115,12 @@ function pickWind(level: number): number {
 }
 
 export default function LunarLander() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("lunar-lander");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -222,6 +230,7 @@ export default function LunarLander() {
     setResultMsg(msg);
     setStatus("crashed");
     if (st.score > highScore) { setHighScore(st.score); localStorage.setItem("lander-highscore", String(st.score)); }
+    hostRef.current.reportScore(st.score);
   };
 
   useEffect(() => {
@@ -326,6 +335,7 @@ export default function LunarLander() {
                   st.score += total;
                   setScore(st.score);
                   if (st.score > highScore) { setHighScore(st.score); localStorage.setItem("lander-highscore", String(st.score)); }
+                  hostRef.current.reportScore(st.score);
                   setResultMsg(`x${seg.mult} pad bonus +${padBonus} · fuel +${fuelBonus}`);
                   setStatus("landed");
                 } else {

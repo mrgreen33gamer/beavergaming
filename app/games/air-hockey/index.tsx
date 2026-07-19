@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 420;
 const HEIGHT = 620;
 const PADDLE_R = 26;
@@ -19,6 +21,12 @@ const STUCK_FRAMES_TO_ACT = 35;   // ~0.6s in AI half slow before AI panic-sweep
 type Spark = { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string };
 
 export default function AirHockey() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("air-hockey");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [playerScore, setPlayerScore] = useState(0);
   const [aiScore, setAiScore] = useState(0);
@@ -360,6 +368,7 @@ export default function AirHockey() {
     if (st.playerScore >= WIN_SCORE) {
       st.running = false; setOver("player");
       const w = wins + 1; setWins(w); localStorage.setItem("airhockey-wins", String(w));
+      hostRef.current.reportEvent("match_won");
     } else if (st.aiScore >= WIN_SCORE) {
       st.running = false; setOver("ai");
     } else {

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const WORD_THEMES: { name: string; words: string[] }[] = [
   { name: "ARCADE", words: ["PIXEL", "JOYSTICK", "ARCADE", "COIN", "HIGHSCORE", "LASER", "LEVEL", "BOSS"] },
@@ -58,6 +60,12 @@ function buildGrid(words: string[]): { grid: string[][]; placements: Placement[]
 }
 
 export default function WordSearch() {
+  // Ref'd because the solve handler is wired into pointer callbacks that close
+  // over their first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("word-search");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [themeIdx, setThemeIdx] = useState(0);
   const [grid, setGrid] = useState<string[][]>([]);
   const [placements, setPlacements] = useState<Placement[]>([]);
@@ -118,6 +126,7 @@ export default function WordSearch() {
         if (f.size >= placements.length) {
           setSolved(true);
           if (bestSec === null || seconds < bestSec) { setBestSec(seconds); localStorage.setItem("wordsearch-best", String(seconds)); }
+          hostRef.current.reportEvent("puzzle_solved");
         }
       }
     }

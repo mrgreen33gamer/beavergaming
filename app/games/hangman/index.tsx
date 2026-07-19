@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const WORDS = [
   "BEAVER", "HELICOPTER", "ASTEROID", "ARCADE", "JOYSTICK", "PIXEL",
@@ -18,6 +20,12 @@ const MAX_WRONG = 6;
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 export default function Hangman() {
+  // Ref'd because the round-end effect closes over its first render — reading
+  // `host` directly there would go stale.
+  const { host } = useCartridge("hangman");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [word, setWord] = useState("");
   const [guessed, setGuessed] = useState<Set<string>>(new Set());
   const [wrong, setWrong] = useState(0);
@@ -51,6 +59,7 @@ export default function Hangman() {
     if (won) {
       const ns = streak + 1; setStreak(ns);
       if (ns > bestStreak) { setBestStreak(ns); localStorage.setItem("hangman-best-streak", String(ns)); }
+      hostRef.current.reportEvent("match_won");
     } else if (lost) setStreak(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [won, lost]);

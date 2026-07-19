@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const COLS = 12;
 const ROWS = 12;
 const MINES = 24;
@@ -45,6 +47,12 @@ function buildGrid(safeR: number, safeC: number): Cell[][] {
 }
 
 export default function Minesweeper() {
+  // Ref'd so the report always reaches the current host, never a stale one
+  // captured by an earlier render's closure.
+  const { host } = useCartridge("minesweeper");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const [grid, setGrid] = useState<Cell[][]>([]);
   const [started, setStarted] = useState(false);
   const [over, setOver] = useState(false);
@@ -126,6 +134,7 @@ export default function Minesweeper() {
       running.current = false;
       const t = time;
       if (best === null || t < best) { setBest(t); localStorage.setItem("minesweeper-best", String(t)); }
+      hostRef.current.reportEvent("puzzle_solved");
     }
   };
 

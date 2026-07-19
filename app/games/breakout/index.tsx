@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 const WIDTH = 600;
 const HEIGHT = 440;
 const PADDLE_W = 84;
@@ -16,6 +18,12 @@ const BRICK_TOP = 50;
 type Brick = { x: number; y: number; alive: boolean; row: number };
 
 export default function Breakout() {
+  // Ref'd because die() is called from the canvas loop, which closes over its
+  // first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("breakout");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -192,6 +200,7 @@ export default function Breakout() {
     st.running = false;
     setScore(st.score);
     if (st.score > highScore) { setHighScore(st.score); localStorage.setItem("breakout-highscore", String(st.score)); }
+    hostRef.current.reportScore(st.score);
     setGameOver(true);
   };
 
