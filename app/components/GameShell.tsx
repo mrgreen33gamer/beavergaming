@@ -90,7 +90,7 @@ export default function GameShell({ meta, accent, children }: GameShellProps) {
           <button
             onClick={pause}
             aria-label="Pause game"
-            className="pixel-edge px-3 py-1 rounded bg-[var(--surface-2)] font-[family-name:var(--font-mono)] text-base"
+            className="pixel-edge t-body px-3 py-1 rounded bg-[var(--surface-2)]"
           >
             ⏸ Pause
           </button>
@@ -98,14 +98,14 @@ export default function GameShell({ meta, accent, children }: GameShellProps) {
         <button
           onClick={() => setMutedValue(!muted)}
           aria-label={muted ? "Unmute audio" : "Mute audio"}
-          className="pixel-edge px-3 py-1 rounded bg-[var(--surface-2)] font-[family-name:var(--font-mono)] text-base"
+          className="pixel-edge t-body px-3 py-1 rounded bg-[var(--surface-2)]"
         >
           {muted ? "🔇 Muted" : "🔊 Sound"}
         </button>
         <button
           onClick={toggleFullscreen}
           aria-label="Toggle fullscreen"
-          className="pixel-edge px-3 py-1 rounded bg-[var(--surface-2)] font-[family-name:var(--font-mono)] text-base"
+          className="pixel-edge t-body px-3 py-1 rounded bg-[var(--surface-2)]"
         >
           ⛶ Fullscreen
         </button>
@@ -118,7 +118,7 @@ export default function GameShell({ meta, accent, children }: GameShellProps) {
       {paused && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/85 rounded-lg">
           <h2
-            className="font-[family-name:var(--font-display)] text-lg mb-4"
+            className="t-display-lg mb-4"
             style={{ color: accent }}
           >
             PAUSED
@@ -126,11 +126,11 @@ export default function GameShell({ meta, accent, children }: GameShellProps) {
           <button
             onClick={resume}
             aria-label="Resume game"
-            className="pixel-edge px-5 py-2 rounded bg-[var(--crt-green)] text-[var(--background)] font-[family-name:var(--font-display)] text-xs"
+            className="pixel-edge t-display-sm px-5 py-2 rounded bg-[var(--crt-green)] text-[var(--background)]"
           >
             RESUME
           </button>
-          <p className="mt-3 font-[family-name:var(--font-mono)] text-base text-[var(--muted)]">
+          <p className="t-body mt-3 text-[var(--muted)]">
             Esc to resume
           </p>
         </div>

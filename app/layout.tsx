@@ -22,7 +22,7 @@ const vt323 = VT323({
 export const metadata: Metadata = {
   title: "Beaver Gaming — Free Online Games",
   description:
-    "A pile of simple, addictive browser games. No downloads, no logins, just play.",
+    "A pile of simple, addictive browser games. No downloads, no install — just play instantly in your browser.",
 };
 
 export default function RootLayout({

@@ -14,22 +14,22 @@ export default function CategoryCarousel({ label, games }: { label: string; game
   return (
     <section className="mb-8">
       <div className="flex items-baseline justify-between mb-3 px-1">
-        <h2 className="font-[family-name:var(--font-display)] text-sm text-[var(--accent)] flex items-baseline gap-2">
+        <h2 className="t-display-md text-[var(--accent)] flex items-baseline gap-2">
           {label}
-          <span className="font-[family-name:var(--font-mono)] text-base text-[var(--muted)] normal-case tracking-normal">{games.length}</span>
+          <span className="t-caption text-[var(--muted)]">{games.length}</span>
         </h2>
         <div className="hidden sm:flex gap-1.5">
           <button
             onClick={() => scroll(-1)}
             aria-label="scroll left"
-            className="pixel-edge w-8 h-8 rounded bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-[var(--accent)]/30 transition-colors font-[family-name:var(--font-mono)] text-lg leading-none"
+            className="pixel-edge w-8 h-8 rounded bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-[var(--accent)]/30 transition-colors t-body leading-none"
           >
             ‹
           </button>
           <button
             onClick={() => scroll(1)}
             aria-label="scroll right"
-            className="pixel-edge w-8 h-8 rounded bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-[var(--accent)]/30 transition-colors font-[family-name:var(--font-mono)] text-lg leading-none"
+            className="pixel-edge w-8 h-8 rounded bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-[var(--accent)]/30 transition-colors t-body leading-none"
           >
             ›
           </button>

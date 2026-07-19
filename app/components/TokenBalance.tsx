@@ -47,7 +47,7 @@ export default function TokenBalance() {
     <span
       aria-label={`${balance} B-Tokens`}
       title="B-Tokens are free-play currency. Server ledger when online; this device as fallback."
-      className="flex items-center gap-1 font-[family-name:var(--font-mono)] text-base text-[var(--accent)]"
+      className="t-body flex items-center gap-1 text-[var(--accent)]"
     >
       <span aria-hidden="true">🪙</span>
       <span className="sr-only">B-Tokens:</span>
