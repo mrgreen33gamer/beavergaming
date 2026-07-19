@@ -4,6 +4,7 @@ import Footer from "@/app/components/Footer";
 import SignOutButton from "@/app/components/SignOutButton";
 import { getCurrentUser } from "@/lib/auth/server";
 import { getServerEconomy } from "@/lib/platform/server/getServerEconomy";
+import { levelProgress, rankFor, earnMultiplier, MAX_LEVEL } from "@/lib/platform/progression";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,11 @@ export default async function AccountPage() {
 
   const { economy } = await getServerEconomy();
   const balance = await economy.getBalance();
+
+  const { level, intoLevel, needed } = levelProgress(user.xp ?? 0);
+  const rank = rankFor(level);
+  const bonus = Math.round((earnMultiplier(level) - 1) * 100);
+  const pct = needed > 0 ? Math.min(100, Math.round((intoLevel / needed) * 100)) : 100;
 
   return (
     <>
@@ -39,6 +45,34 @@ export default async function AccountPage() {
           <div className="flex justify-between items-baseline gap-4 p-5">
             <dt className="t-label text-[var(--muted)]">B-Tokens</dt>
             <dd className="t-body text-[var(--accent)]">🪙 {balance}</dd>
+          </div>
+          <div className="p-5">
+            <div className="flex justify-between items-baseline gap-4">
+              <dt className="t-label text-[var(--muted)]">Rank</dt>
+              <dd className="t-body text-[var(--foreground)]">
+                {rank.name} · Level {level}
+                {bonus >= 1 && (
+                  <span className="t-caption block text-[var(--crt-green)]">
+                    +{bonus}% earn bonus
+                  </span>
+                )}
+              </dd>
+            </div>
+            <div
+              className="mt-3 h-2 overflow-hidden rounded border border-[var(--border)] bg-[var(--surface-2)]"
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Progress to level ${Math.min(MAX_LEVEL, level + 1)}`}
+            >
+              <div className="h-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
+            </div>
+            <p className="t-caption mt-2 text-[var(--muted)]">
+              {level >= MAX_LEVEL
+                ? "Maximum level reached."
+                : `${intoLevel} / ${needed} XP to level ${level + 1}`}
+            </p>
           </div>
         </dl>
 

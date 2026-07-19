@@ -14,6 +14,13 @@ export class Economy {
     private storage: StorageAdapter,
     private playerId: string,
     private now: () => Date = () => new Date(),
+    /**
+     * Rank earn bonus. Applied to the desired grant *before* the daily caps,
+     * so a boosted rate can never lift the ceiling — a high-rank player
+     * reaches the cap sooner but cannot earn past it. That is the only thing
+     * keeping "rank earns faster" from compounding into a farm.
+     */
+    private earnMultiplier: number = 1,
   ) {}
 
   async getBalance(): Promise<number> {
@@ -74,9 +81,10 @@ export class Economy {
     if (wanted <= 0) return 0;
 
     const rate = rateFor(gameId);
+    const boosted = Math.floor(wanted * Math.max(1, this.earnMultiplier));
     const gameRemaining = rate.dailyCap - (await this.earnedToday(gameId));
     const globalRemaining = GLOBAL_DAILY_CAP - (await this.earnedToday());
-    const granted = Math.max(0, Math.min(wanted, gameRemaining, globalRemaining));
+    const granted = Math.max(0, Math.min(boosted, gameRemaining, globalRemaining));
     if (granted === 0) return 0;
 
     const balance = await this.getBalance();

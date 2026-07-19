@@ -111,6 +111,17 @@ export class MongoAuthStore implements AuthStore {
     await (await this.users()).updateOne({ _id: id }, { $set: next });
   }
 
+  async addXp(userId: string, amount: number): Promise<number> {
+    if (amount <= 0) return (await this.findUserById(userId))?.xp ?? 0;
+    // $inc so concurrent grants from two tabs cannot lose each other.
+    const res = await (await this.users()).findOneAndUpdate(
+      { _id: userId },
+      { $inc: { xp: amount } },
+      { returnDocument: "after" },
+    );
+    return res?.xp ?? 0;
+  }
+
   async createSession(session: Session): Promise<void> {
     const { id, ...rest } = session;
     await (await this.sessions()).insertOne({

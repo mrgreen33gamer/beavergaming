@@ -49,6 +49,14 @@ export class MemoryAuthStore implements AuthStore {
     this.users.set(id, next);
   }
 
+  async addXp(userId: string, amount: number): Promise<number> {
+    const u = this.users.get(userId);
+    if (!u || amount <= 0) return u?.xp ?? 0;
+    const next = { ...u, xp: (u.xp ?? 0) + amount };
+    this.users.set(userId, next);
+    return next.xp;
+  }
+
   async createSession(session: Session): Promise<void> {
     this.sessions.set(session.id, { ...session });
   }

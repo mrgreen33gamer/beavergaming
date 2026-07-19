@@ -6,6 +6,8 @@ export interface User {
   displayName: string;
   emailVerified: boolean;
   createdAt: string;
+  /** Lifetime EXP. Level and rank are derived, never stored. */
+  xp: number;
 }
 
 export interface Session {
@@ -38,6 +40,9 @@ export interface AuthStore {
   /** Rejects with a DuplicateEmailError if the email is already registered. */
   createUser(user: Omit<User, "id">): Promise<User>;
   updateUser(id: string, patch: Partial<Omit<User, "id">>): Promise<void>;
+
+  /** Adds to a user's lifetime XP. Returns the new total. */
+  addXp(userId: string, amount: number): Promise<number>;
 
   createSession(session: Session): Promise<void>;
   findSession(id: string): Promise<Session | null>;

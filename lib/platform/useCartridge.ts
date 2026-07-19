@@ -8,6 +8,19 @@ import { SaveApi } from "./save";
 import { getPlayerId } from "./player";
 import { subscribeGamePause } from "./pauseBus";
 import { notifyBalanceChanged } from "./balanceBus";
+import { notifyAward } from "./awardBus";
+
+/** Shape returned by both economy grant routes. */
+interface GrantResponse {
+  granted: number;
+  balance: number;
+  isRecord?: boolean;
+  signedIn?: boolean;
+  reason?: "account_required";
+  level?: number;
+  rank?: string;
+  leveledUpTo?: number;
+}
 
 export interface UseCartridgeResult {
   /** Pass this to game code. It is the entire trusted surface. */
@@ -25,20 +38,17 @@ export interface UseCartridgeResult {
 async function postScore(
   gameId: string,
   score: number,
-): Promise<{ granted: number; balance: number; isRecord: boolean } | null> {
+  runId: string,
+): Promise<GrantResponse | null> {
   try {
     const res = await fetch("/api/economy/score", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ gameId, score }),
+      body: JSON.stringify({ gameId, score, runId }),
     });
     if (!res.ok) return null;
-    return (await res.json()) as {
-      granted: number;
-      balance: number;
-      isRecord: boolean;
-    };
+    return (await res.json()) as GrantResponse;
   } catch {
     return null;
   }
@@ -47,16 +57,17 @@ async function postScore(
 async function postEvent(
   gameId: string,
   name: string,
-): Promise<{ granted: number; balance: number } | null> {
+  runId: string,
+): Promise<GrantResponse | null> {
   try {
     const res = await fetch("/api/economy/event", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ gameId, name }),
+      body: JSON.stringify({ gameId, name, runId }),
     });
     if (!res.ok) return null;
-    return (await res.json()) as { granted: number; balance: number };
+    return (await res.json()) as GrantResponse;
   } catch {
     return null;
   }
@@ -87,6 +98,14 @@ export function useCartridge(gameId: string): UseCartridgeResult {
 
   const pauseCbs = useRef<Array<() => void>>([]);
   const resumeCbs = useRef<Array<() => void>>([]);
+  /**
+   * The last score handed to reportScore that has not yet been confirmed by
+   * the server. A normal fetch is abandoned when the tab closes, so without
+   * this a player who quits the instant they die loses the run.
+   */
+  const pendingScore = useRef<number | null>(null);
+  /** Shared by the fetch and the unload beacon so a retry is not paid twice. */
+  const pendingRunId = useRef<string | null>(null);
 
   const { economy, save } = useMemo(() => {
     const storage = getStorage();
@@ -120,6 +139,33 @@ export function useCartridge(gameId: string): UseCartridgeResult {
   }, [gameId, save, economy, publishBalance]);
 
   useEffect(() => {
+    const flush = () => {
+      const score = pendingScore.current;
+      const runId = pendingRunId.current;
+      if (score === null || runId === null) return;
+      if (typeof navigator.sendBeacon !== "function") return;
+      pendingScore.current = null;
+      // sendBeacon is queued by the browser and delivered even as the page
+      // goes away, which fetch is not guaranteed to be.
+      navigator.sendBeacon(
+        "/api/economy/score",
+        new Blob([JSON.stringify({ gameId, score, runId })], {
+          type: "application/json",
+        }),
+      );
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [gameId]);
+
+  useEffect(() => {
     return subscribeGamePause((paused) => {
       const list = paused ? pauseCbs.current : resumeCbs.current;
       for (const cb of list) {
@@ -134,12 +180,25 @@ export function useCartridge(gameId: string): UseCartridgeResult {
 
   const reportScore = useCallback(
     (score: number) => {
+      const runId = crypto.randomUUID();
+      pendingScore.current = score;
+      pendingRunId.current = runId;
       void (async () => {
-        const remote = await postScore(gameId, score);
+        const remote = await postScore(gameId, score, runId);
         if (remote) {
+          pendingScore.current = null;
           if (remote.isRecord) setHighScore(score);
           setLastAward(remote.granted);
           publishBalance(remote.balance);
+          notifyAward({
+            granted: remote.granted,
+            gameId,
+            balance: remote.balance,
+            signedIn: remote.signedIn ?? true,
+            reason: remote.reason,
+            leveledUpTo: remote.leveledUpTo,
+            rank: remote.rank,
+          });
           // Mirror high score into client save for offline reads / legacy.
           if (remote.isRecord) await save.setHighScore(gameId, score);
           return;
@@ -159,10 +218,19 @@ export function useCartridge(gameId: string): UseCartridgeResult {
     (name: string, value?: number) => {
       void value;
       void (async () => {
-        const remote = await postEvent(gameId, name);
+        const remote = await postEvent(gameId, name, crypto.randomUUID());
         if (remote) {
           setLastAward(remote.granted);
           publishBalance(remote.balance);
+          notifyAward({
+            granted: remote.granted,
+            gameId,
+            balance: remote.balance,
+            signedIn: remote.signedIn ?? true,
+            reason: remote.reason,
+            leveledUpTo: remote.leveledUpTo,
+            rank: remote.rank,
+          });
           return;
         }
         const granted = await economy.applyEvent(gameId, name);
