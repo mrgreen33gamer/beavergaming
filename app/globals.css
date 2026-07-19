@@ -30,6 +30,66 @@
   --font-display: var(--font-press-start);
 }
 
+/* ==========================================================================
+   Type scale
+   ==========================================================================
+
+   The two display faces have wildly different per-em glyph sizes, so raw
+   font-size values do NOT produce comparable optical sizes:
+
+     - Press Start 2P (--font-display) draws very large for its em box
+     - VT323 (--font-mono) is a narrow terminal face and draws very small
+
+   Setting both from the same Tailwind scale is what previously made headings
+   render visually SMALLER than the body copy beneath them. The correction is
+   encoded once, here: VT323 runs roughly 1.6x the px size of Press Start 2P
+   to land at the same optical weight.
+
+   Components use these semantic classes and never pick a raw font-size.
+   ========================================================================== */
+
+/* --- Display (Press Start 2P) — pixel face, needs airy leading ----------- */
+.t-display-xl,
+.t-display-lg,
+.t-display-md,
+.t-display-sm {
+  font-family: var(--font-display), monospace;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.55;
+}
+
+.t-display-xl { font-size: 1.375rem; }  /* 22px — hero title */
+.t-display-lg { font-size: 1.125rem; }  /* 18px — page h1 */
+.t-display-md { font-size: 0.875rem; }  /* 14px — section heading */
+.t-display-sm { font-size: 0.75rem;  }  /* 12px — card title */
+
+@media (min-width: 640px) {
+  .t-display-xl { font-size: 1.875rem; } /* 30px */
+  .t-display-lg { font-size: 1.375rem; } /* 22px */
+  .t-display-md { font-size: 1rem;     } /* 16px */
+}
+
+/* --- Body (VT323) — terminal face, runs ~1.6x display to match optically -- */
+.t-body-lg,
+.t-body,
+.t-caption,
+.t-label {
+  font-family: var(--font-mono), monospace;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.t-body-lg { font-size: 1.5rem;   }  /* 24px — lead paragraph */
+.t-body    { font-size: 1.25rem;  }  /* 20px — default copy */
+.t-caption { font-size: 1.0625rem;}  /* 17px — secondary detail */
+
+.t-label {
+  font-size: 1rem;                    /* 16px — uppercase micro label */
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -39,6 +99,22 @@ body {
     radial-gradient(circle at 80% 80%, rgba(127, 214, 80, 0.04) 0%, transparent 50%);
   background-attachment: fixed;
 }
+
+/* ==========================================================================
+   Focus states
+   ========================================================================== */
+
+/* Keyboard users get a visible ring on every interactive element; pointer
+   users don't, since :focus-visible excludes mouse focus. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ==========================================================================
+   Retro effects
+   ========================================================================== */
 
 /* CRT scanline overlay used on game thumbnails and the player */
 .crt {
@@ -74,7 +150,25 @@ body {
   transform: translateY(-2px);
 }
 
-/* Wiggle animation for hover */
+/* Emoji fallback art. Games without a card image get a deliberate framed
+   treatment rather than a bare glyph, so the library reads as uniform even
+   while art coverage is partial. */
+.tile-emoji-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 6px
+    );
+}
+
 @keyframes wiggle {
   0%, 100% { transform: rotate(0deg) translateY(-2px); }
   25% { transform: rotate(-1deg) translateY(-2px); }
@@ -99,4 +193,35 @@ body {
 canvas {
   display: block;
   image-rendering: pixelated;
+}
+
+/* ==========================================================================
+   Reduced motion
+   ==========================================================================
+   Respect the OS-level preference. The arcade flourishes are decorative, so
+   they stop entirely rather than degrade — but hover still gives a visible
+   affordance via the pixel-edge shadow, which is not motion. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .flicker {
+    animation: none;
+    opacity: 1;
+  }
+
+  .pixel-edge:hover {
+    transform: none;
+  }
+
+  .pixel-edge:hover .tile-emoji {
+    animation: none;
+  }
 }

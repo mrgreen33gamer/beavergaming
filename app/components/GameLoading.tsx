@@ -15,11 +15,11 @@ export default function GameLoading({
       aria-live="polite"
       className="flex flex-col items-center justify-center gap-4 py-24"
     >
-      <p className="font-[family-name:var(--font-display)] text-xs text-[var(--muted)]">
+      <p className="t-display-sm text-[var(--muted)]">
         LOADING
       </p>
       <p
-        className="font-[family-name:var(--font-display)] text-base flicker"
+        className="t-display-md flicker"
         style={{ color: accent }}
       >
         {title.toUpperCase()}

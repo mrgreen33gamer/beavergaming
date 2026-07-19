@@ -30,12 +30,12 @@ export default async function PlayPage({
         <div className="mb-4 flex items-center justify-between">
           <Link
             href="/"
-            className="font-[family-name:var(--font-mono)] text-lg text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
+            className="t-body text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
           >
             &larr; back to all games
           </Link>
           <span
-            className="px-2 py-0.5 rounded font-[family-name:var(--font-mono)] text-sm uppercase tracking-wider"
+            className="t-label px-2 py-0.5 rounded"
             style={{ background: game.accent, color: "#1a0e0a" }}
           >
             {game.category}
@@ -43,10 +43,10 @@ export default async function PlayPage({
         </div>
 
         <div className="mb-4">
-          <h1 className="font-[family-name:var(--font-display)] text-lg sm:text-xl text-[var(--accent)] mb-2">
+          <h1 className="t-display-lg text-[var(--accent)] mb-2">
             {game.title.toUpperCase()}
           </h1>
-          <p className="font-[family-name:var(--font-mono)] text-lg text-[var(--muted)]">
+          <p className="t-body text-[var(--muted)]">
             {game.controls}
           </p>
         </div>
@@ -58,17 +58,17 @@ export default async function PlayPage({
 
         {/* Description */}
         <div className="mt-6 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-          <h2 className="font-[family-name:var(--font-display)] text-xs text-[var(--foreground)] mb-2">
+          <h2 className="t-display-md text-[var(--foreground)] mb-3">
             ABOUT THIS GAME
           </h2>
-          <p className="font-[family-name:var(--font-mono)] text-lg text-[var(--muted)] leading-snug">
+          <p className="t-body text-[var(--muted)]">
             {game.description}
           </p>
         </div>
 
         {/* Other games */}
         <div className="mt-8">
-          <h2 className="font-[family-name:var(--font-display)] text-xs text-[var(--accent)] mb-3">
+          <h2 className="t-display-md text-[var(--accent)] mb-3">
             MORE GAMES
           </h2>
           <div className="flex gap-2 overflow-x-auto pb-2">
@@ -78,7 +78,7 @@ export default async function PlayPage({
                 <Link
                   key={g.slug}
                   href={`/play/${g.slug}`}
-                  className="pixel-edge flex-shrink-0 px-3 py-2 rounded bg-[var(--surface-2)] hover:bg-[var(--surface)] font-[family-name:var(--font-mono)] text-base flex items-center gap-2"
+                  className="pixel-edge t-body flex-shrink-0 px-3 py-2 rounded bg-[var(--surface-2)] hover:bg-[var(--surface)] flex items-center gap-2"
                 >
                   <span className="text-xl">{g.emoji}</span>
                   <span>{g.title}</span>

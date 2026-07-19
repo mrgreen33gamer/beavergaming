@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { Economy } from "@/lib/platform/economy";
 import { SaveApi } from "@/lib/platform/save";
 import { selectServerAdapter } from "@/lib/platform/storage/selectServer";
+import { getCurrentUser } from "@/lib/auth/server";
 import { MemoryAdapter } from "./memoryAdapter";
 import type { StorageAdapter } from "@/lib/platform/storage/types";
 
@@ -10,7 +11,7 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
 
 let cachedAdapter: StorageAdapter | null = null;
 
-function getServerAdapter(): StorageAdapter {
+export function getServerAdapter(): StorageAdapter {
   if (cachedAdapter) return cachedAdapter;
   const uri = process.env.MONGODB_URI?.trim();
   if (uri) {
@@ -24,7 +25,8 @@ function getServerAdapter(): StorageAdapter {
   return cachedAdapter;
 }
 
-export async function resolveServerPlayerId(): Promise<string> {
+/** The anonymous guest id for this browser, minting one if absent. */
+export async function resolveGuestId(): Promise<string> {
   const jar = await cookies();
   const existing = jar.get(COOKIE)?.value;
   if (existing && /^anon-[a-z0-9]+$/i.test(existing)) {
@@ -39,6 +41,20 @@ export async function resolveServerPlayerId(): Promise<string> {
     secure: process.env.NODE_ENV === "production",
   });
   return id;
+}
+
+/**
+ * The id the ledger is keyed by: the account id when signed in, otherwise the
+ * guest cookie. Signing in therefore switches a player onto their account
+ * ledger, which is what makes balances follow them across devices.
+ *
+ * The guest cookie is deliberately left in place on sign-in so signing out
+ * returns to the same guest ledger rather than minting a fresh one.
+ */
+export async function resolveServerPlayerId(): Promise<string> {
+  const user = await getCurrentUser();
+  if (user) return user.id;
+  return resolveGuestId();
 }
 
 export async function getServerEconomy(): Promise<{
