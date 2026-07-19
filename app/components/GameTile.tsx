@@ -28,6 +28,7 @@ export default function GameTile({ game }: { game: Game }) {
             slug={game.slug}
             emoji={game.emoji}
             accent={game.accent}
+            category={game.category}
           />
         )}
 

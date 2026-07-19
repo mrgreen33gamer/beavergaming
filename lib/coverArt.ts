@@ -1,11 +1,13 @@
 /**
  * Deterministic generated cover art.
  *
- * 43 games ship with a single hand-made card image, and the rest fell back to
- * a bare emoji floating on a flat gradient — which is what made a library of
- * real games read as a prototype. Commissioning or generating 42 images is a
- * separate project (and currently blocked on API credits), so this builds
- * artwork from what each game already declares: its accent colour and slug.
+ * One game ships a real card image; the rest previously fell back to a bare
+ * emoji on a flat gradient, which is what made a library of real games read as
+ * a prototype. Rather than depend on an image service, covers are built from
+ * what each game already declares: its accent colour, slug, and genre.
+ *
+ * A real cardImage always wins where one exists, so this is a floor rather
+ * than a ceiling.
  *
  * Everything here is pure and seeded from the slug, so a given game always
  * renders the same cover — across reloads, across server and client, and in
@@ -55,7 +57,91 @@ function rng(seed: number): () => number {
   };
 }
 
-export function patternFor(slug: string): CoverPattern {
+/**
+ * Pattern per game, chosen to suit the game rather than at random.
+ *
+ * Hashing the slug spread things evenly but produced covers that fought their
+ * subject — Breakout drew a starfield while Space Invaders drew bricks. These
+ * are assigned by hand so the artwork reads as deliberate.
+ */
+const PATTERN_BY_SLUG: Record<string, CoverPattern> = {
+  // Mazes and boards read as grids.
+  snake: "grid",
+  pacman: "grid",
+  battleship: "grid",
+  "tower-defense": "grid",
+  "word-search": "grid",
+  minesweeper: "grid",
+
+  // Wiring and routing.
+  tron: "circuit",
+  pipes: "circuit",
+  "lights-out": "circuit",
+  mastermind: "circuit",
+
+  // Anything set in space.
+  "space-invaders": "stars",
+  galaga: "stars",
+  asteroids: "stars",
+  "lunar-lander": "stars",
+  centipede: "stars",
+
+  // Firing outward from a point.
+  "missile-command": "rays",
+  "apple-shooter": "rays",
+  "zombie-shooter": "rays",
+  "tank-shooter": "rays",
+  simon: "rays",
+
+  // Stacked or tiled blocks.
+  breakout: "bricks",
+  tetris: "bricks",
+  "2048": "bricks",
+  "slide-puzzle": "bricks",
+  sokoban: "bricks",
+  "stack-tower": "bricks",
+  "memory-match": "bricks",
+
+  // Flat playfields with travelling lanes.
+  pong: "scanlines",
+  "air-hockey": "scanlines",
+  frogger: "scanlines",
+  "dino-runner": "scanlines",
+  hangman: "scanlines",
+
+  // Motion that rises and falls.
+  "dam-rush": "waves",
+  helicopter: "waves",
+  "line-rider": "waves",
+  "sky-hop": "waves",
+  plinko: "waves",
+
+  // Round pieces and radial play.
+  "bubble-shooter": "orbits",
+  "match-three": "orbits",
+  "connect-four": "orbits",
+  reversi: "orbits",
+  "whack-a-mole": "orbits",
+  "mini-golf": "orbits",
+};
+
+/** Sensible default per genre when a game has no explicit assignment. */
+const PATTERN_BY_CATEGORY: Record<string, CoverPattern> = {
+  action: "rays",
+  arcade: "stars",
+  puzzle: "bricks",
+  reflex: "scanlines",
+  classic: "grid",
+};
+
+export function patternFor(slug: string, category?: string): CoverPattern {
+  const explicit = PATTERN_BY_SLUG[slug];
+  if (explicit) return explicit;
+
+  const byCategory = category ? PATTERN_BY_CATEGORY[category] : undefined;
+  if (byCategory) return byCategory;
+
+  // Last resort for a game added without either — still deterministic.
   return COVER_PATTERNS[hashString(slug) % COVER_PATTERNS.length];
 }
 
@@ -202,7 +288,9 @@ export function patternMarkup(pattern: CoverPattern, seed: number): string {
 }
 
 /** Everything a cover needs, derived from the game alone. */
-export function coverFor(slug: string): { pattern: CoverPattern; seed: number } {
-  const seed = hashString(slug);
-  return { pattern: patternFor(slug), seed };
+export function coverFor(
+  slug: string,
+  category?: string,
+): { pattern: CoverPattern; seed: number } {
+  return { pattern: patternFor(slug, category), seed: hashString(slug) };
 }

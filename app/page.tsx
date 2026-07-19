@@ -33,9 +33,11 @@ export default function Home() {
               </h2>
 
               <p className="t-body-lg mb-8 max-w-xl text-[var(--muted)]">
-                A hand-built arcade of {games.length}{" "}
-                browser games. No installs, no paywalls, no account required —
-                press play and you&apos;re in.
+                {/* Explicit {" "} — JSX drops the space between an expression
+                    and text that begins a line, which renders "43browser". */}
+                {games.length}{" "}
+                browser games, ready when you are. No installs, no paywalls, no
+                account required — press play and you&apos;re in.
               </p>
 
               <div className="flex flex-wrap items-center gap-4">
@@ -76,6 +78,7 @@ export default function Home() {
                       slug={featured.slug}
                       emoji={featured.emoji}
                       accent={featured.accent}
+                      category={featured.category}
                       size="hero"
                     />
                   )}

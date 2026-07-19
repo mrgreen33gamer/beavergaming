@@ -216,6 +216,18 @@ canvas {
     linear-gradient(180deg, rgba(58, 34, 24, 0.55) 0%, rgba(26, 14, 10, 0) 100%);
 }
 
+/* Carousels scroll without a visible scrollbar — the arrows and edge fades
+   carry that job instead. Scrolling itself is untouched, so trackpad, touch
+   and keyboard all still work. */
+.no-scrollbar {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* legacy Edge */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;                  /* WebKit */
+}
+
 /* Game tiles. The lift is deliberately small — a whole grid of cards jumping
    is noise, not feedback. */
 .game-tile {

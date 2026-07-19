@@ -12,14 +12,16 @@ export default function GameCover({
   slug,
   emoji,
   accent,
+  category,
   size = "tile",
 }: {
   slug: string;
   emoji: string;
   accent: string;
+  category?: string;
   size?: "tile" | "hero";
 }) {
-  const { pattern, seed } = coverFor(slug);
+  const { pattern, seed } = coverFor(slug, category);
   const markup = patternMarkup(pattern, seed);
 
   return (

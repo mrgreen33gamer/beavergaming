@@ -24,7 +24,6 @@ export const games: Game[] = [
     controls: "↑ ↓ / W S / mouse / drag to move",
     emoji: "🦫",
     accent: "#5fc8e0",
-    featured: true,
   },
   {
     slug: "tank-shooter",
@@ -48,6 +47,7 @@ export const games: Game[] = [
     emoji: "🚁",
     accent: "#ff6b1a",
     cardImage: "helicopter.jpg",
+    featured: true,
   },
   {
     slug: "apple-shooter",
