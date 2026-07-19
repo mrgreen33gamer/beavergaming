@@ -64,4 +64,15 @@ describe("GameShell", () => {
     );
     expect(screen.getByRole("button", { name: /fullscreen/i })).toBeInTheDocument();
   });
+
+  it("toggles the mute control", async () => {
+    const user = userEvent.setup();
+    render(
+      <GameShell meta={meta} accent="#ff6b1a">
+        <div />
+      </GameShell>,
+    );
+    await user.click(screen.getByRole("button", { name: /mute audio/i }));
+    expect(screen.getByRole("button", { name: /unmute audio/i })).toBeInTheDocument();
+  });
 });

@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { CartridgeMeta } from "@/lib/platform/cartridge";
+import { useMuted } from "@/lib/platform/audio";
 
 interface GameShellProps {
   meta: CartridgeMeta;
@@ -17,6 +18,7 @@ interface GameShellProps {
  */
 export default function GameShell({ meta, accent, children }: GameShellProps) {
   const [paused, setPaused] = useState(false);
+  const [muted, setMutedValue] = useMuted();
   const containerRef = useRef<HTMLDivElement>(null);
   const canPause = meta.supportsPause !== false;
 
@@ -42,6 +44,13 @@ export default function GameShell({ meta, accent, children }: GameShellProps) {
             ⏸ Pause
           </button>
         )}
+        <button
+          onClick={() => setMutedValue(!muted)}
+          aria-label={muted ? "Unmute audio" : "Mute audio"}
+          className="pixel-edge px-3 py-1 rounded bg-[var(--surface-2)] font-[family-name:var(--font-mono)] text-base"
+        >
+          {muted ? "🔇 Muted" : "🔊 Sound"}
+        </button>
         <button
           onClick={toggleFullscreen}
           aria-label="Toggle fullscreen"
