@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 import type {
   Point, Direction, Mode, Food, Powerup, Wall, Particle, FloatingText, DeathStats, SnakeSettings,
@@ -45,6 +46,12 @@ const DEFAULT_DEATH: DeathStats = {
 const DEFAULT_SETTINGS: SnakeSettings = { sound: true, particles: true };
 
 export default function SnakeGame() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("snake");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = useState<Mode | null>(null);
   const [score, setScore] = useState(0);
@@ -632,6 +639,7 @@ export default function SnakeGame() {
     };
     setDeathStats(stats);
     setGameOver(true);
+    hostRef.current.reportScore(s.score);
     const stored = parseInt(localStorage.getItem(HIGHSCORE_KEY[s.mode]) || "0", 10);
     if (s.score > stored) {
       localStorage.setItem(HIGHSCORE_KEY[s.mode], String(s.score));

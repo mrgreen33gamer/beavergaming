@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useCartridge } from "@/lib/platform/useCartridge";
 import {
   initAudio, setMuted as setAudioMuted,
   sfxCatchSmall, sfxCatchBig, sfxFish, sfxBad, sfxPowerup, sfxCombo,
@@ -77,6 +78,12 @@ function activeLaneYs(waterLevel: number): number[] {
 }
 
 export default function DamRush() {
+  // Ref'd because the death handler runs inside the canvas loop, which closes
+  // over its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("dam-rush");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -333,6 +340,7 @@ export default function DamRush() {
     const final = Math.floor(st.score);
     setScore(final);
     if (final > highScore) { setHighScore(final); localStorage.setItem("dam-rush-highscore", String(final)); }
+    hostRef.current.reportScore(final);
     setTimeout(() => setGameOver(true), 700);
   };
 

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useCartridge } from "@/lib/platform/useCartridge";
+
 // Maze: # wall, . pellet, o power pellet, space empty, G ghost spawn, P player spawn
 const MAZE = [
   "###################",
@@ -37,6 +39,12 @@ type Cell = { wall: boolean; pellet: boolean; power: boolean };
 type Ghost = { x: number; y: number; dx: number; dy: number; color: string; scared: boolean; homeX: number; homeY: number };
 
 export default function Pacman() {
+  // Ref'd because finalize() is called from the canvas loop, which closes over
+  // its first render — reading `host` directly there would go stale.
+  const { host } = useCartridge("pacman");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -333,6 +341,7 @@ export default function Pacman() {
       setHighScore(finalScore);
       localStorage.setItem("pacman-highscore", String(finalScore));
     }
+    hostRef.current.reportScore(finalScore);
   };
   const die = (st: typeof s.current) => { st.running = false; finalize(st); setGameOver(true); };
   const winGame = (st: typeof s.current) => { finalize(st); setWon(true); setGameOver(true); };

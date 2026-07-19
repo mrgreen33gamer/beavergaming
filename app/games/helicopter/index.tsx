@@ -48,10 +48,18 @@ import {
 } from "./sound";
 import { subscribeGamePause } from "@/lib/platform/pauseBus";
 import { subscribeMute } from "@/lib/platform/audio";
+import { useCartridge } from "@/lib/platform/useCartridge";
 
 const SPACE_IDX = BIOMES.findIndex((b) => b.id === "space");
 
 export default function HelicopterGame() {
+  // Held in a ref because the crash handler lives inside the canvas loop,
+  // which is created once — reading `host` directly there would capture a
+  // stale closure and silently stop reporting.
+  const { host } = useCartridge("helicopter");
+  const hostRef = useRef(host);
+  hostRef.current = host;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1031,6 +1039,8 @@ export default function HelicopterGame() {
             setHighScore(finalScore);
             localStorage.setItem(HIGHSCORE_KEY[s.difficulty], String(finalScore));
           }
+          // The platform prices the run; the game only reports what happened.
+          hostRef.current.reportScore(finalScore);
           setTimeout(() => setGameOver(true), 600);
         } else if (frame - s.lastScoreSyncFrame >= UI_SYNC_FRAMES) {
           // Throttle React HUD updates — setState every few frames was causing
