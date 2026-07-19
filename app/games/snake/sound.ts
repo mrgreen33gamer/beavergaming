@@ -1,5 +1,7 @@
 // Snake game sound system — Web Audio API, zero dependencies.
 
+import { isMuted as platformMuted } from "@/lib/platform/audio";
+
 let ctx: AudioContext | null = null;
 let muted = false;
 
@@ -9,13 +11,17 @@ export function initAudio() {
 }
 
 export function setMuted(m: boolean) { muted = m; }
-export function isMuted() { return muted; }
+export function isMuted() { return muted || platformMuted(); }
+
+function silenced() {
+  return muted || platformMuted();
+}
 
 function tone(
   freq: number, dur: number, vol = 0.08,
   type: OscillatorType = "square", delay = 0
 ) {
-  if (!ctx || muted) return;
+  if (!ctx || silenced()) return;
   const t = ctx.currentTime + delay;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -51,7 +57,7 @@ export function playPoison() {
 
 // Death — noise burst
 export function playDeath() {
-  if (!ctx || muted) return;
+  if (!ctx || silenced()) return;
   const dur = 0.3;
   const bufSize = Math.floor(ctx.sampleRate * dur);
   const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);

@@ -8,16 +8,23 @@ const NOT_IMPLEMENTED = "MongoAdapter not implemented until Phase 2";
  * falling back to localStorage and appearing to work.
  */
 export class MongoAdapter implements StorageAdapter {
-  async get<T>(_scope: string, _key: string): Promise<T | null> {
+  async get<T>(scope: string, key: string): Promise<T | null> {
+    void scope;
+    void key;
     throw new Error(NOT_IMPLEMENTED);
   }
-  async set(_scope: string, _key: string, _value: unknown): Promise<void> {
+  async set(scope: string, key: string, value: unknown): Promise<void> {
+    void scope;
+    void key;
+    void value;
     throw new Error(NOT_IMPLEMENTED);
   }
-  async appendLedger(_entry: LedgerEntry): Promise<void> {
+  async appendLedger(entry: LedgerEntry): Promise<void> {
+    void entry;
     throw new Error(NOT_IMPLEMENTED);
   }
-  async readLedger(_playerId: string): Promise<LedgerEntry[]> {
+  async readLedger(playerId: string): Promise<LedgerEntry[]> {
+    void playerId;
     throw new Error(NOT_IMPLEMENTED);
   }
 }

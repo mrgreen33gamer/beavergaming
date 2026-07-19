@@ -18,6 +18,10 @@ export default function Pong() {
   const [won, setWon] = useState(false);
   const [started, setStarted] = useState(false);
   const { host } = useCartridge("pong");
+  const hostRef = useRef(host);
+  useEffect(() => {
+    hostRef.current = host;
+  }, [host]);
 
   const s = useRef({
     py: HEIGHT / 2 - PADDLE_H / 2,
@@ -26,6 +30,7 @@ export default function Pong() {
     bvx: 4, bvy: 2,
     up: false, down: false,
     running: false,
+    paused: false,
     pScore: 0, aScore: 0,
     targetY: HEIGHT / 2,
   });
@@ -50,16 +55,35 @@ export default function Pong() {
   };
 
   useEffect(() => {
+    host.onPause(() => {
+      s.current.paused = true;
+    });
+    host.onResume(() => {
+      s.current.paused = false;
+    });
+  }, [host]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     let raf = 0;
 
+    const checkEnd = (st: typeof s.current) => {
+      if (st.pScore >= WIN_SCORE || st.aScore >= WIN_SCORE) {
+        st.running = false;
+        const playerWon = st.pScore > st.aScore;
+        setWon(playerWon);
+        if (playerWon) hostRef.current.reportEvent("match_won");
+        setGameOver(true);
+      }
+    };
+
     const loop = () => {
       const st = s.current;
 
-      if (st.running) {
+      if (st.running && !st.paused) {
         // Player paddle
         if (st.up) st.py -= 6;
         if (st.down) st.py += 6;
@@ -121,18 +145,7 @@ export default function Pong() {
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const checkEnd = (st: typeof s.current) => {
-    if (st.pScore >= WIN_SCORE || st.aScore >= WIN_SCORE) {
-      st.running = false;
-      const playerWon = st.pScore > st.aScore;
-      setWon(playerWon);
-      if (playerWon) host.reportEvent("match_won");
-      setGameOver(true);
-    }
-  };
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {

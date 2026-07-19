@@ -31,16 +31,11 @@ function randomBoard(level: number): Grid {
 }
 
 export default function LightsOut() {
-  const [grid, setGrid] = useState<Grid>(emptyGrid);
+  const [grid, setGrid] = useState<Grid>(() => randomBoard(1));
   const [level, setLevel] = useState(1);
   const [moves, setMoves] = useState(0);
   const [solved, setSolved] = useState(false);
   const { host, highScore: bestLevel } = useCartridge("lights-out");
-
-  useEffect(() => {
-    newPuzzle(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const newPuzzle = (lv: number) => {
     setLevel(lv);
@@ -48,6 +43,13 @@ export default function LightsOut() {
     setMoves(0);
     setSolved(false);
   };
+
+  // Turn-based: shell overlay already blocks clicks; register pause no-ops so
+  // the host surface is exercised consistently with other pilots.
+  useEffect(() => {
+    host.onPause(() => {});
+    host.onResume(() => {});
+  }, [host]);
 
   const press = (r: number, c: number) => {
     if (solved) return;

@@ -1,9 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import GameShell from "@/app/components/GameShell";
+import {
+  isGamePaused,
+  __resetGamePause,
+} from "@/lib/platform/pauseBus";
 
 const meta = { id: "pong", runtime: "canvas" as const };
+
+beforeEach(() => {
+  __resetGamePause();
+});
 
 describe("GameShell", () => {
   it("renders its child game", () => {
@@ -74,5 +82,19 @@ describe("GameShell", () => {
     );
     await user.click(screen.getByRole("button", { name: /mute audio/i }));
     expect(screen.getByRole("button", { name: /unmute audio/i })).toBeInTheDocument();
+  });
+
+  it("publishes pause state on the global pause bus", async () => {
+    const user = userEvent.setup();
+    render(
+      <GameShell meta={meta} accent="#ff6b1a">
+        <div />
+      </GameShell>,
+    );
+    expect(isGamePaused()).toBe(false);
+    await user.click(screen.getByRole("button", { name: /pause/i }));
+    expect(isGamePaused()).toBe(true);
+    await user.click(screen.getByRole("button", { name: /resume/i }));
+    expect(isGamePaused()).toBe(false);
   });
 });

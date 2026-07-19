@@ -1,10 +1,9 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useMemo } from "react";
+import { Suspense } from "react";
 import GameShell from "@/app/components/GameShell";
 import GameLoading from "@/app/components/GameLoading";
-import { gameLoaders } from "./gameRegistry";
+import { gameComponents } from "./gameComponents";
 
 /**
  * Lazily loads one game and wraps it in the shared shell. The game itself is
@@ -19,18 +18,14 @@ export default function GameFrame({
   title: string;
   accent: string;
 }) {
-  const Game = useMemo(
-    () =>
-      dynamic(gameLoaders[slug], {
-        loading: () => <GameLoading title={title} accent={accent} />,
-        ssr: false,
-      }),
-    [slug, title, accent],
-  );
+  const Game = gameComponents[slug];
+  if (!Game) return null;
 
   return (
     <GameShell meta={{ id: slug, runtime: "canvas" }} accent={accent}>
-      <Game />
+      <Suspense fallback={<GameLoading title={title} accent={accent} />}>
+        <Game />
+      </Suspense>
     </GameShell>
   );
 }

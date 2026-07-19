@@ -1,10 +1,15 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useCartridge } from "@/lib/platform/useCartridge";
 import { CARTRIDGE_HOST_METHODS } from "@/lib/platform/cartridge";
+import { setGamePaused, __resetGamePause } from "@/lib/platform/pauseBus";
+import { subscribeBalance } from "@/lib/platform/balanceBus";
 
 describe("useCartridge", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    __resetGamePause();
+  });
 
   it("exposes only the allowed host surface", () => {
     const { result } = renderHook(() => useCartridge("pong"));
@@ -65,5 +70,37 @@ describe("useCartridge", () => {
     localStorage.setItem("asteroids-highscore", "4200");
     const { result } = renderHook(() => useCartridge("asteroids"));
     await waitFor(() => expect(result.current.highScore).toBe(4200));
+  });
+
+  it("fires host pause/resume callbacks from the pause bus", async () => {
+    const onPause = vi.fn();
+    const onResume = vi.fn();
+    const { result } = renderHook(() => useCartridge("pong"));
+    act(() => {
+      result.current.host.onPause(onPause);
+      result.current.host.onResume(onResume);
+    });
+    act(() => {
+      setGamePaused(true);
+    });
+    expect(onPause).toHaveBeenCalledTimes(1);
+    act(() => {
+      setGamePaused(false);
+    });
+    expect(onResume).toHaveBeenCalledTimes(1);
+  });
+
+  it("publishes balance changes for the header", async () => {
+    const seen: number[] = [];
+    const unsub = subscribeBalance((b) => {
+      seen.push(b);
+    });
+    const { result } = renderHook(() => useCartridge("pong"));
+    await act(async () => {
+      result.current.host.reportScore(1000);
+    });
+    await waitFor(() => expect(result.current.balance).toBe(10));
+    expect(seen).toContain(10);
+    unsub();
   });
 });

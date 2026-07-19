@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isMuted as platformMuted } from "@/lib/platform/audio";
 
 const PADS = [
   { id: 0, color: "#7fd650", lit: "#b8f088", freq: 330 },
@@ -27,7 +28,7 @@ export default function Simon() {
   }, []);
 
   const beep = (freq: number, dur = 0.3) => {
-    if (!audioCtx.current) return;
+    if (!audioCtx.current || platformMuted()) return;
     const ctx = audioCtx.current;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();

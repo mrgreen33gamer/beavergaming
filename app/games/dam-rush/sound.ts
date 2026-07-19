@@ -1,10 +1,24 @@
 // Dam Rush sound engine — Web Audio API, no dependencies, no audio files.
 
+import { isMuted as platformMuted, subscribeMute } from "@/lib/platform/audio";
+
 let ctx: AudioContext | null = null;
 let muted = false;
 let waterOsc: OscillatorNode | null = null;
 let waterGain: GainNode | null = null;
 let waterLfo: OscillatorNode | null = null;
+
+function silenced() {
+  return muted || platformMuted();
+}
+
+function applyWaterGain() {
+  if (waterGain) waterGain.gain.value = silenced() ? 0 : 0.012;
+}
+
+if (typeof window !== "undefined") {
+  subscribeMute(() => applyWaterGain());
+}
 
 export function initAudio() {
   if (ctx) return;
@@ -12,12 +26,12 @@ export function initAudio() {
 }
 export function setMuted(m: boolean) {
   muted = m;
-  if (waterGain) waterGain.gain.value = m ? 0 : 0.012;
+  applyWaterGain();
 }
-export function isMuted() { return muted; }
+export function isMuted() { return silenced(); }
 
 function tone(freq: number, dur: number, vol = 0.07, type: OscillatorType = "square", delay = 0) {
-  if (!ctx || muted) return;
+  if (!ctx || silenced()) return;
   const t = ctx.currentTime + delay;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -31,7 +45,7 @@ function tone(freq: number, dur: number, vol = 0.07, type: OscillatorType = "squ
 }
 
 function sweep(f0: number, f1: number, dur: number, vol = 0.06, type: OscillatorType = "sawtooth") {
-  if (!ctx || muted) return;
+  if (!ctx || silenced()) return;
   const t = ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -46,7 +60,7 @@ function sweep(f0: number, f1: number, dur: number, vol = 0.06, type: Oscillator
 }
 
 function noise(dur: number, vol = 0.1, decay = 1.5) {
-  if (!ctx || muted) return;
+  if (!ctx || silenced()) return;
   const n = Math.floor(ctx.sampleRate * dur);
   const buf = ctx.createBuffer(1, n, ctx.sampleRate);
   const data = buf.getChannelData(0);
@@ -103,7 +117,7 @@ export function startWater() {
   waterGain = ctx.createGain();
   waterOsc.type = "sine";
   waterOsc.frequency.value = 60;
-  waterGain.gain.value = muted ? 0 : 0.012;
+  waterGain.gain.value = silenced() ? 0 : 0.012;
   waterLfo = ctx.createOscillator();
   const lfoGain = ctx.createGain();
   waterLfo.frequency.value = 0.4;
