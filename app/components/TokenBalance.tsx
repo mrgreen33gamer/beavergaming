@@ -8,7 +8,9 @@ import { subscribeBalance } from "@/lib/platform/balanceBus";
 
 /** Header readout of the player's B-Token balance. */
 export default function TokenBalance() {
-  const [balance, setBalance] = useState(0);
+  // null until the real balance is known. Rendering a confident 0 first
+  // makes every page load flash 0 -> actual, which reads as a bug.
+  const [balance, setBalance] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -45,13 +47,13 @@ export default function TokenBalance() {
 
   return (
     <span
-      aria-label={`${balance} B-Tokens`}
+      aria-label={balance === null ? "Loading token balance" : `${balance} B-Tokens`}
       title="B-Tokens are free-play currency. Server ledger when online; this device as fallback."
       className="t-body flex items-center gap-1 text-[var(--accent)]"
     >
       <span aria-hidden="true">🪙</span>
       <span className="sr-only">B-Tokens:</span>
-      <span>{balance}</span>
+      <span>{balance === null ? "–" : balance}</span>
     </span>
   );
 }
