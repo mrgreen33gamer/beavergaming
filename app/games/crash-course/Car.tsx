@@ -129,9 +129,11 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
       b.setAngvel({ x: 0, y: steer * CAR.steerRate * speedFactor * dir, z: 0 }, true);
     }
 
-    // Reaching the pile zone hands control to physics for the finale.
+    // Reaching the pile zone hands control to physics for the finale. Armed a
+    // little ahead of the pile so props (and the slow movers) are already
+    // "live" by the time the car ploughs into them.
     const t = b.translation();
-    if (!crashed.current && t.z < TRACK.pileZ + 10) {
+    if (!crashed.current && t.z < TRACK.pileZ + 18) {
       crashed.current = true;
       b.setEnabledRotations(true, true, true, true);
       onEnterCrash();

@@ -104,11 +104,13 @@ export default function CrashCourse() {
     setPhase("ready");
   };
 
+  // The finale is triggered ONLY by the car reaching the pile — never by a
+  // destruction event. Otherwise the pile settling on physics-unpause counts
+  // as "destruction" and ends the run before the player can drive.
   const enterCrash = () => setPhase((p) => (p === "driving" ? "crashing" : p));
 
   const onDestroyed = (kind: PropKind) => {
     setScore((prev) => registerDestruction(prev, kind, performance.now()));
-    enterCrash();
   };
 
   const running = phase === "driving" || phase === "crashing";
@@ -160,6 +162,7 @@ export default function CrashCourse() {
               onDestroyed={onDestroyed}
               onEnterCrash={enterCrash}
               runKey={runKey}
+              active={phase === "crashing"}
             />
           </Physics>
         </Canvas>

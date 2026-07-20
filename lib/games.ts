@@ -15,6 +15,17 @@ export type Game = {
 
 export const games: Game[] = [
   {
+    slug: "crash-course",
+    title: "Crash Course",
+    blurb: "Drive, nitro, and total the pile.",
+    description:
+      "A 3D demolition run. Spawn in your car, drive a short track, and bank three nitro charges for the run-up — a moderate boost that's about timing and control, not being fired down the road. The whole point is the end: an Angry-Birds-style pile of crates, barrels, gold, and junk cars (plus a couple of slow movers drifting across the run-in) that you plow straight through. Smashing is weighted — gray crates are chump change, gold crates and cars are the money — and destroying objects in quick succession chains an escalating combo multiplier, so one giant pile-driver is worth far more than picking things off. Your car wrecks gloriously as you go: panels fly off into the debris and the body squashes down with every heavy hit. Built with Three.js, React Three Fiber, and Rapier physics.",
+    category: "action",
+    controls: "WASD / arrows to drive · SPACE for nitro",
+    emoji: "🚗",
+    accent: "#ff5050",
+  },
+  {
     slug: "dam-rush",
     title: "Dam Rush",
     blurb: "The water's rising. Build or drown.",
@@ -488,17 +499,6 @@ export const games: Game[] = [
     controls: "click pipes to rotate",
     emoji: "🧩",
     accent: "#b8a088",
-  },
-  {
-    slug: "crash-course",
-    title: "Crash Course",
-    blurb: "Drive, nitro, and total the pile.",
-    description:
-      "A 3D demolition run. Spawn in your car, drive a short track, and bank three nitro charges for the run-up — a moderate boost that's about timing and control, not being fired down the road. The whole point is the end: an Angry-Birds-style pile of crates, barrels, gold, and junk cars (plus a couple of slow movers drifting across the run-in) that you plow straight through. Smashing is weighted — gray crates are chump change, gold crates and cars are the money — and destroying objects in quick succession chains an escalating combo multiplier, so one giant pile-driver is worth far more than picking things off. Your car wrecks gloriously as you go: panels fly off into the debris and the body squashes down with every heavy hit. Built with Three.js, React Three Fiber, and Rapier physics.",
-    category: "action",
-    controls: "WASD / arrows to drive · SPACE for nitro",
-    emoji: "🚗",
-    accent: "#ff5050",
   },
 ];
 

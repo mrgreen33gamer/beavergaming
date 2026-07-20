@@ -27,12 +27,14 @@ function buildPile(): PileItem[] {
   for (let layer = 0; layer < 3; layer++) {
     const halfX = 3 - layer;
     const rows = 5 - layer;
-    const y = 0.6 + layer * 1.2;
+    // Generous spacing + a small lift so nothing interpenetrates at spawn and
+    // the stack settles gently instead of erupting when physics un-pauses.
+    const y = 0.75 + layer * 1.35;
     for (let gx = -halfX; gx <= halfX; gx++) {
       for (let gz = 0; gz < rows; gz++) {
-        const jitter = () => (Math.random() - 0.5) * 0.15;
-        const x = gx * 1.2 + jitter();
-        const z = z0 - gz * 1.2 + jitter();
+        const jitter = () => (Math.random() - 0.5) * 0.08;
+        const x = gx * 1.5 + jitter();
+        const z = z0 - gz * 1.5 + jitter();
         let kind: PropKind = "crate";
         if ((Math.abs(gx) + gz) % 7 === 0) kind = "gold";
         else if (gz % 3 === 0) kind = "barrel";
@@ -61,10 +63,15 @@ export interface SceneProps {
   onEnterCrash: () => void;
   /** Stable per-run so a Replay rebuilds a fresh pile. */
   runKey: number;
+  /** True only once the finale is live — props ignore impacts before then. */
+  active: boolean;
 }
 
-export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey }: SceneProps) {
+export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, active }: SceneProps) {
   // Rebuild the pile only when a new run starts, not on every HUD re-render.
+  // buildPile() reads Math.random, so runKey is a deliberate rebuild trigger
+  // even though it isn't referenced inside — ESLint can't see that.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const pile = useMemo(() => buildPile(), [runKey]);
   const groundLen = 102;
   const groundCenterZ = 12 - groundLen / 2;
@@ -127,6 +134,7 @@ export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey }:
           position={item.position}
           drift={item.drift}
           onDestroyed={onDestroyed}
+          active={active}
         />
       ))}
     </>

@@ -30,6 +30,8 @@ export interface DestructibleProps {
   onDestroyed: (kind: PropKind) => void;
   /** Optional constant drift velocity [vx, vz] for slow movers. */
   drift?: [number, number];
+  /** When false, impacts are ignored (pile is still settling / drive phase). */
+  active: boolean;
 }
 
 /**
@@ -42,6 +44,7 @@ export default function Destructible({
   position,
   onDestroyed,
   drift,
+  active,
 }: DestructibleProps) {
   const body = useRef<RapierRigidBody>(null);
   const destroyed = useRef(false);
@@ -66,7 +69,7 @@ export default function Destructible({
       position={position}
       density={DENSITY[kind]}
       onContactForce={(payload) => {
-        if (destroyed.current) return;
+        if (!active || destroyed.current) return;
         if (payload.totalForceMagnitude < IMPACT.destroyForce) return;
         destroyed.current = true;
         setDim(true);
