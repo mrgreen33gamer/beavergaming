@@ -54,6 +54,9 @@ export const GAME_RATES: Record<string, Partial<EarnRate>> = {
   "sky-hop": { tokensPerPoint: 0.02 },       // ~1,500/run
 
   // --- score ~2,000-3,500 ---------------------------------------------
+  // Weighted destruction + combo: a strong pile-driver run totals ~4,500
+  // (mixed props at x2-x6 combos), so this lands near the ~30-token target.
+  "crash-course": { tokensPerPoint: 0.007 }, // ~4,500/run
   "zombie-shooter": { tokensPerPoint: 0.015 }, // ~2,000/run
   "dino-runner": { tokensPerPoint: 0.013 },  // ~2,150/run
   breakout: { tokensPerPoint: 0.01 },        // ~2,750/run

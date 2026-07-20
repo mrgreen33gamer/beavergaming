@@ -57,4 +57,5 @@ export const gameLoaders: Record<string, Loader> = {
   "missile-command": () => import("@/app/games/missile-command/index"),
   centipede: () => import("@/app/games/centipede/index"),
   pipes: () => import("@/app/games/pipes/index"),
+  "crash-course": () => import("@/app/games/crash-course/index"),
 };

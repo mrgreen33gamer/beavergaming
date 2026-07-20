@@ -1,0 +1,129 @@
+import { describe, it, expect } from "vitest";
+import {
+  PROP_VALUES,
+  COMBO_WINDOW_MS,
+  initialScore,
+  registerDestruction,
+  initialNitrous,
+  spendNitrous,
+  nitrousActive,
+  initialDamage,
+  applyDamage,
+  squashScale,
+  DAMAGE_PANELS,
+} from "../scoring";
+
+describe("scoring — weighted destruction + combo", () => {
+  it("first hit scores base value at x1", () => {
+    const s = registerDestruction(initialScore(), "barrel", 1000);
+    expect(s.total).toBe(PROP_VALUES.barrel);
+    expect(s.multiplier).toBe(1);
+    expect(s.destroyed).toBe(1);
+  });
+
+  it("chains the multiplier for hits inside the window", () => {
+    let s = initialScore();
+    s = registerDestruction(s, "crate", 0); // x1 -> +10
+    s = registerDestruction(s, "crate", 400); // x2 -> +20
+    s = registerDestruction(s, "crate", 800); // x3 -> +30
+    expect(s.multiplier).toBe(3);
+    expect(s.total).toBe(10 + 20 + 30);
+    expect(s.bestMultiplier).toBe(3);
+    expect(s.destroyed).toBe(3);
+  });
+
+  it("resets the combo once the window lapses", () => {
+    let s = initialScore();
+    s = registerDestruction(s, "crate", 0); // x1
+    s = registerDestruction(s, "crate", 400); // x2
+    s = registerDestruction(s, "crate", 1200); // gap > 500ms -> x1
+    expect(s.multiplier).toBe(1);
+    expect(s.bestMultiplier).toBe(2);
+  });
+
+  it("treats a hit exactly on the window edge as chained", () => {
+    let s = initialScore();
+    s = registerDestruction(s, "crate", 0);
+    s = registerDestruction(s, "crate", COMBO_WINDOW_MS);
+    expect(s.multiplier).toBe(2);
+  });
+
+  it("weights different props by their value, multiplier included", () => {
+    let s = initialScore();
+    s = registerDestruction(s, "car", 0); // x1 -> 300
+    s = registerDestruction(s, "gold", 200); // x2 -> 400
+    expect(s.total).toBe(300 + 400);
+  });
+
+  it("does not mutate the input state", () => {
+    const s0 = initialScore();
+    registerDestruction(s0, "gold", 100);
+    expect(s0.total).toBe(0);
+    expect(s0.destroyed).toBe(0);
+  });
+});
+
+describe("nitrous accounting", () => {
+  it("spends a charge and activates a boost", () => {
+    const n = spendNitrous(initialNitrous(3), 1000, 2000);
+    expect(n.charges).toBe(2);
+    expect(nitrousActive(n, 1500)).toBe(true);
+    expect(nitrousActive(n, 3000)).toBe(false);
+  });
+
+  it("cannot spend while a boost is already active", () => {
+    const n1 = spendNitrous(initialNitrous(3), 1000, 2000);
+    const n2 = spendNitrous(n1, 1500, 2000);
+    expect(n2).toBe(n1); // identity: nothing happened
+    expect(n2.charges).toBe(2);
+  });
+
+  it("can spend again once the boost expires", () => {
+    let n = spendNitrous(initialNitrous(3), 1000, 2000);
+    n = spendNitrous(n, 3100, 2000);
+    expect(n.charges).toBe(1);
+  });
+
+  it("refuses to spend with no charges left", () => {
+    const empty = initialNitrous(0);
+    expect(spendNitrous(empty, 0, 2000)).toBe(empty);
+  });
+});
+
+describe("car damage", () => {
+  it("detaches panels in order on successive hits", () => {
+    let d = initialDamage();
+    const r1 = applyDamage(d, 0, 250);
+    expect(r1.detached).toBe(DAMAGE_PANELS[0]);
+    expect(r1.applied).toBe(true);
+    d = r1.state;
+    const r2 = applyDamage(d, 500, 250);
+    expect(r2.detached).toBe(DAMAGE_PANELS[1]);
+    expect(r2.state.hits).toBe(2);
+  });
+
+  it("respects the cooldown between hits", () => {
+    const d = applyDamage(initialDamage(), 0, 250).state;
+    const blocked = applyDamage(d, 100, 250); // inside cooldown
+    expect(blocked.applied).toBe(false);
+    expect(blocked.detached).toBe(null);
+    expect(blocked.state).toBe(d);
+  });
+
+  it("keeps registering hits after every panel is gone", () => {
+    let d = initialDamage();
+    let t = 0;
+    for (let i = 0; i < DAMAGE_PANELS.length + 2; i++) {
+      d = applyDamage(d, t, 250).state;
+      t += 300;
+    }
+    expect(d.attached.length).toBe(0);
+    expect(d.hits).toBe(DAMAGE_PANELS.length + 2);
+  });
+
+  it("squashes the chassis but never inverts it", () => {
+    expect(squashScale(0)).toBe(1);
+    expect(squashScale(1)).toBeCloseTo(0.88);
+    expect(squashScale(100)).toBeGreaterThanOrEqual(0.45);
+  });
+});

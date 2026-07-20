@@ -72,6 +72,7 @@ const PATTERN_BY_SLUG: Record<string, CoverPattern> = {
   "tower-defense": "grid",
   "word-search": "grid",
   minesweeper: "grid",
+  "crash-course": "grid", // a road receding to the horizon
 
   // Wiring and routing.
   tron: "circuit",

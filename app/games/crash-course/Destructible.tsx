@@ -1,0 +1,155 @@
+"use client";
+
+import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
+import { RoundedBox } from "@react-three/drei";
+import { RigidBody, type RapierRigidBody } from "@react-three/rapier";
+import { PROP_COLOR, IMPACT } from "./config";
+import { fxBus } from "./fxBus";
+import type { PropKind } from "./scoring";
+
+/** Box dimensions per kind (metres). Cars are much bigger and heavier. */
+const SIZE: Record<PropKind, [number, number, number]> = {
+  crate: [1, 1, 1],
+  box: [1.2, 1.2, 1.2],
+  barrel: [0.95, 1.3, 0.95],
+  gold: [1, 1, 1],
+  car: [3.4, 1.3, 1.7],
+};
+
+const DENSITY: Record<PropKind, number> = {
+  crate: 0.6,
+  box: 0.7,
+  barrel: 0.8,
+  gold: 0.9,
+  car: 1.4,
+};
+
+export interface DestructibleProps {
+  kind: PropKind;
+  position: [number, number, number];
+  /** Called once, the first time this object is smashed hard enough. */
+  onDestroyed: (kind: PropKind) => void;
+  /** Optional constant drift velocity [vx, vz] for slow movers. */
+  drift?: [number, number];
+  /** When false, impacts are ignored (pile is still settling / drive phase). */
+  active: boolean;
+}
+
+/**
+ * One smashable object. Stays a normal dynamic body until a contact force
+ * crosses the destroy threshold, at which point it reports its value exactly
+ * once, flashes, throws sparks, gets a dramatic scatter impulse, and dims.
+ */
+export default function Destructible({
+  kind,
+  position,
+  onDestroyed,
+  drift,
+  active,
+}: DestructibleProps) {
+  const body = useRef<RapierRigidBody>(null);
+  const destroyed = useRef(false);
+  const flash = useRef(0);
+  const size = SIZE[kind];
+  const baseEmissive = kind === "gold" ? 0.4 : 0;
+
+  const material = useMemo(() => {
+    const color = PROP_COLOR[kind];
+    return new THREE.MeshStandardMaterial({
+      color,
+      emissive: new THREE.Color(kind === "gold" ? "#ffcf33" : color),
+      emissiveIntensity: baseEmissive,
+      metalness: kind === "gold" ? 0.65 : 0.15,
+      roughness: kind === "gold" ? 0.3 : 0.75,
+    });
+  }, [kind, baseEmissive]);
+  useEffect(() => () => material.dispose(), [material]);
+
+  useFrame(() => {
+    // Slow movers keep a constant horizontal velocity until they are hit.
+    if (drift && !destroyed.current) {
+      const b = body.current;
+      if (b) {
+        const v = b.linvel();
+        b.setLinvel({ x: drift[0], y: v.y, z: drift[1] }, true);
+      }
+    }
+    // Impact flash decays back to the resting emissive level.
+    if (flash.current > 0) {
+      flash.current = Math.max(0, flash.current - 0.055);
+      material.emissiveIntensity = baseEmissive + flash.current;
+      if (flash.current === 0 && destroyed.current) material.color.multiplyScalar(0.75);
+    }
+  });
+
+  return (
+    <RigidBody
+      ref={body}
+      type="dynamic"
+      colliders="cuboid"
+      position={position}
+      density={DENSITY[kind]}
+      onContactForce={(payload) => {
+        if (!active || destroyed.current) return;
+        if (payload.totalForceMagnitude < IMPACT.destroyForce) return;
+        destroyed.current = true;
+        flash.current = 1.8;
+        onDestroyed(kind);
+        const t = body.current?.translation();
+        if (t) {
+          fxBus.triggerImpact(
+            t.x, t.y, t.z,
+            Math.min(1, payload.totalForceMagnitude / (IMPACT.destroyForce * 4)),
+          );
+        }
+        const dir = payload.totalForce;
+        const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
+        body.current?.applyImpulse(
+          {
+            x: (dir.x / len) * IMPACT.scatterImpulse,
+            y: IMPACT.scatterImpulse * 0.6,
+            z: (dir.z / len) * IMPACT.scatterImpulse,
+          },
+          true,
+        );
+      }}
+    >
+      {kind === "barrel" ? (
+        <mesh material={material} castShadow receiveShadow>
+          <cylinderGeometry args={[size[0] / 2, size[0] / 2, size[1], 16]} />
+        </mesh>
+      ) : kind === "car" ? (
+        <group>
+          <RoundedBox
+            args={[size[0], size[1] * 0.62, size[2]]}
+            radius={0.14}
+            smoothness={3}
+            position={[0, -size[1] * 0.18, 0]}
+            material={material}
+            castShadow
+            receiveShadow
+          />
+          <RoundedBox
+            args={[size[0] * 0.66, size[1] * 0.5, size[2] * 0.6]}
+            radius={0.14}
+            smoothness={3}
+            position={[0, size[1] * 0.28, 0]}
+            material={material}
+            castShadow
+          />
+        </group>
+      ) : (
+        <RoundedBox
+          args={size}
+          radius={kind === "box" ? 0.12 : 0.07}
+          smoothness={3}
+          material={material}
+          castShadow
+          receiveShadow
+        />
+      )}
+    </RigidBody>
+  );
+}
