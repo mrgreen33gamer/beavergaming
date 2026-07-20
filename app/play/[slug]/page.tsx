@@ -52,7 +52,7 @@ export default async function PlayPage({
         </div>
 
         {/* Game canvas container */}
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4 crt">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4">
           <GameFrame slug={game.slug} title={game.title} accent={game.accent} />
         </div>
 

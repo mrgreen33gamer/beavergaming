@@ -20,13 +20,14 @@ const SIZE: Record<PropKind, [number, number, number]> = {
   car: [4.2, 1.6, 2.0],
 };
 
-// Light, so the car shoves them around easily.
+// Styrofoam-light props fling away on contact; the "car" props stay heavy
+// enough to actually dent you.
 const DENSITY: Record<PropKind, number> = {
-  crate: 0.28,
-  box: 0.32,
-  barrel: 0.4,
-  gold: 0.5,
-  car: 0.9,
+  crate: 0.1,
+  box: 0.12,
+  barrel: 0.14,
+  gold: 0.2,
+  car: 0.7,
 };
 
 export interface DestructibleProps {
@@ -91,6 +92,8 @@ export default function Destructible({
       colliders={false}
       position={position}
       density={DENSITY[kind]}
+      restitution={0.15}
+      userData={{ smashable: true }}
       onContactForce={(payload) => {
         if (destroyed.current || performance.now() < armedAt) return;
         if (payload.totalForceMagnitude < IMPACT.destroyForce) return;

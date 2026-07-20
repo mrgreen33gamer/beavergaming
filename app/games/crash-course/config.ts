@@ -44,10 +44,11 @@ export const TRACK = {
 // --- Impact detection -----------------------------------------------------
 export const IMPACT = {
   /** Contact-force magnitude that counts a destructible as destroyed. Lower =
-   *  easier to knock things over. */
-  destroyForce: 480,
-  /** Contact-force on the car that dents/crumples the body + sheds a part. */
-  carDamageForce: 1150,
+   *  easier to knock things over (styrofoam props barely resist). */
+  destroyForce: 280,
+  /** Contact-force on the car that dents/crumples the body + sheds a part.
+   *  High enough that only the heavier cars dent you, not foam crates. */
+  carDamageForce: 700,
   /** Min ms between successive car-damage events (rate limit). */
   carDamageCooldownMs: 220,
   /** Extra impulse added to a destroyed body for drama. */
