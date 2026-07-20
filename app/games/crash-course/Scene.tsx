@@ -10,6 +10,7 @@ import { buildFinale, buildTrackStructures } from "./structures";
 import { TRACK } from "./config";
 import type { PropKind } from "./scoring";
 import type { Phase, RunHud } from "./index";
+import type { MapDef } from "./content/maps";
 
 /** A right-triangular-prism ramp: the low front edge meets the ground on a
  *  line, rising to the back — a real wedge, not a floating tilted box. */
@@ -65,21 +66,22 @@ export interface SceneProps {
   onEnterCrash: () => void;
   runKey: number;
   armedAt: number;
+  map: MapDef;
 }
 
-function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt }: SceneProps) {
+function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: SceneProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const props = useMemo(() => [...buildFinale(TRACK.pileZ), ...buildTrackStructures()], [runKey]);
-  const halfW = TRACK.width / 2;
+  const props = useMemo(() => [...buildFinale(map.pileZ), ...buildTrackStructures()], [runKey]);
+  const halfW = map.trackWidth / 2;
   const groundLen = 102;
   const groundCenterZ = 12 - groundLen / 2;
 
   const laneMarks: number[] = [];
-  for (let z = 6; z > TRACK.pileZ + 16; z -= 6) laneMarks.push(z);
+  for (let z = 6; z > map.pileZ + 16; z -= 6) laneMarks.push(z);
 
   const palette = ["#3a5cc4", "#c44a86", "#2aa5a0", "#e0892a", "#7a4ad6", "#c43a3a"];
   const buildings: { x: number; z: number; w: number; h: number; d: number; color: string }[] = [];
-  for (let z = 4; z > TRACK.pileZ - 6; z -= 9) {
+  for (let z = 4; z > map.pileZ - 6; z -= 9) {
     const idx = buildings.length;
     buildings.push({ x: halfW + 7, z, w: 6, h: 8 + ((z * 5) % 14), d: 6, color: palette[idx % palette.length] });
     buildings.push({ x: -(halfW + 7), z: z - 4, w: 6, h: 6 + ((z * 7) % 16), d: 6, color: palette[(idx + 1) % palette.length] });
@@ -104,7 +106,7 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt }: Scene
         shadow-bias={-0.0005}
       />
       <directionalLight color="#7aa0ff" position={[-20, 16, -12]} intensity={0.5} />
-      <pointLight position={[0, 10, TRACK.pileZ + 4]} intensity={45} distance={70} decay={2} color="#ffb060" />
+      <pointLight position={[0, 10, map.pileZ + 4]} intensity={45} distance={70} decay={2} color="#ffb060" />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.06, groundCenterZ]} receiveShadow>
         <planeGeometry args={[600, 600]} />
@@ -113,7 +115,7 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt }: Scene
 
       <RigidBody type="fixed" colliders="cuboid" position={[0, -0.5, groundCenterZ]}>
         <mesh receiveShadow>
-          <boxGeometry args={[TRACK.width, 1, groundLen]} />
+          <boxGeometry args={[map.trackWidth, 1, groundLen]} />
           <meshStandardMaterial color="#3a3f4b" roughness={0.9} />
         </mesh>
       </RigidBody>
@@ -144,13 +146,13 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt }: Scene
 
       <RigidBody type="fixed" colliders="cuboid" position={[0, 6, groundCenterZ - groundLen / 2 + 1]}>
         <mesh>
-          <boxGeometry args={[TRACK.width, 13, 1]} />
+          <boxGeometry args={[map.trackWidth, 13, 1]} />
           <meshStandardMaterial color="#5a4570" roughness={0.8} />
         </mesh>
       </RigidBody>
 
-      <mesh position={[0, 0.14, TRACK.pileZ + 16]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[TRACK.width, 1.8]} />
+      <mesh position={[0, 0.14, map.pileZ + 16]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[map.trackWidth, 1.8]} />
         <meshStandardMaterial color="#ffd24a" emissive="#ffd24a" emissiveIntensity={1.0} toneMapped={false} depthWrite={false} polygonOffset polygonOffsetFactor={-2} />
       </mesh>
 

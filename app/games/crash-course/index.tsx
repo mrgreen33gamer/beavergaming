@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { useCartridge } from "@/lib/platform/useCartridge";
-import { NITROUS, SETTLE, ARM_GRACE_MS } from "./config";
+import { NITROUS, ARM_GRACE_MS } from "./config";
 import {
   initialScore,
   registerDestruction,
@@ -14,6 +13,10 @@ import {
 import Scene from "./Scene";
 import Effects from "./Effects";
 import { fxBus } from "./fxBus";
+import { QualityProvider } from "./engine/QualityContext";
+import { Viewport } from "./engine/Viewport";
+import { useSettle } from "./engine/useSettle";
+import { getMap, DEFAULT_MAP_ID } from "./content/maps";
 
 export type Phase = "intro" | "ready" | "driving" | "crashing" | "results";
 
@@ -38,6 +41,8 @@ export default function CrashCourse() {
   phaseRef.current = phase;
   const [count, setCount] = useState(3);
   const [runKey, setRunKey] = useState(0);
+  const map = getMap(DEFAULT_MAP_ID);
+  const speedRef = useRef(0);
   /** performance.now() when driving began — props arm ARM_GRACE_MS later. */
   const [driveStartMs, setDriveStartMs] = useState<number | null>(null);
   const [score, setScore] = useState<ScoreState>(initialScore());
@@ -73,27 +78,13 @@ export default function CrashCourse() {
     return () => clearInterval(iv);
   }, [phase]);
 
-  // --- settle watcher: crashing -> results ---
+  // Keep a plain speed ref in sync for the settle watcher.
   useEffect(() => {
-    if (phase !== "crashing") return;
-    const started = performance.now();
-    let restSince: number | null = null;
-    const iv = setInterval(() => {
-      const now = performance.now();
-      if (hud.current.speed < SETTLE.restSpeed) {
-        restSince ??= now;
-        if (now - restSince >= SETTLE.restHoldMs) finish();
-      } else {
-        restSince = null;
-      }
-      if (now - started >= SETTLE.maxCrashMs) finish();
-    }, 150);
-    const finish = () => {
-      clearInterval(iv);
-      setPhase("results");
-    };
-    return () => clearInterval(iv);
-  }, [phase]);
+    speedRef.current = hud.current.speed;
+  });
+
+  const finishRun = useCallback(() => setPhase("results"), []);
+  useSettle(phase === "crashing", speedRef, finishRun);
 
   // --- report the score once, on entering results ---
   useEffect(() => {
@@ -178,23 +169,27 @@ export default function CrashCourse() {
       >
         {/* "percentage" = PCFShadowMap. Plain `shadows` selects the now-
             deprecated PCFSoftShadowMap, which Three re-warns about every single
-            frame it renders shadows — that flood was the console spam. */}
-        <Canvas shadows="percentage" camera={{ position: [0, 6, 18], fov: 55 }}>
-          <color attach="background" args={["#2a3f6b"]} />
-          <fog attach="fog" args={["#2a3f6b", 65, 175]} />
-          <Physics gravity={[0, -19, 0]} paused={phase === "intro" || phase === "ready"}>
-            <Scene
-              key={runKey}
-              phase={phase}
-              hud={hud.current}
-              onDestroyed={onDestroyed}
-              onEnterCrash={enterCrash}
-              runKey={runKey}
-              armedAt={driveStartMs === null ? Infinity : driveStartMs + ARM_GRACE_MS}
-            />
-          </Physics>
-          <Effects />
-        </Canvas>
+            frame it renders shadows — that flood was the console spam. Viewport
+            (engine spine) owns the Canvas, dpr/shadow tier, background colour,
+            error boundary, and context-loss recovery. */}
+        <QualityProvider>
+          <Viewport background={map.theme.background} fov={55}>
+            <fog attach="fog" args={[map.theme.background, map.theme.fogNear, map.theme.fogFar]} />
+            <Physics gravity={[0, -19, 0]} paused={phase === "intro" || phase === "ready"}>
+              <Scene
+                key={runKey}
+                phase={phase}
+                hud={hud.current}
+                onDestroyed={onDestroyed}
+                onEnterCrash={enterCrash}
+                runKey={runKey}
+                armedAt={driveStartMs === null ? Infinity : driveStartMs + ARM_GRACE_MS}
+                map={map}
+              />
+            </Physics>
+            <Effects />
+          </Viewport>
+        </QualityProvider>
 
         {/* Countdown */}
         {phase === "ready" && (
