@@ -52,6 +52,13 @@ export const IMPACT = {
   carDamageForce: 1100,
   /** Min ms between successive car-damage events (rate limit). */
   carDamageCooldownMs: 220,
+  /** Contact-force that dents the body (localized crumple only, no part loss).
+   *  Much lower than carDamageForce so the car visibly takes damage on ordinary
+   *  scrapes and shunts, not just the biggest slams. */
+  dentForce: 400,
+  /** Min ms between dent events — denser than part-shedding so crumple builds
+   *  smoothly without deforming every physics frame. */
+  dentCooldownMs: 90,
   /** Extra impulse added to a destroyed body for drama. */
   scatterImpulse: 14,
 };
@@ -87,4 +94,8 @@ export const PROP_COLOR: Record<PropKind, string> = {
   barrel: "#d63d3d",
   gold: "#ffd24a",
   car: "#4a7bd6",
+  cone: "#ff6a1f",
+  hydrant: "#c8352b",
+  signpost: "#3ba35a",
+  fence: "#8a8f96",
 };

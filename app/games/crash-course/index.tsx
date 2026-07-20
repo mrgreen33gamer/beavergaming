@@ -1,19 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { useCartridge } from "@/lib/platform/useCartridge";
-import { NITROUS, SETTLE, ARM_GRACE_MS } from "./config";
+import { NITROUS, ARM_GRACE_MS } from "./config";
 import {
   initialScore,
   registerDestruction,
+  comboShake,
   type ScoreState,
   type PropKind,
 } from "./scoring";
 import Scene from "./Scene";
 import Effects from "./Effects";
 import { fxBus } from "./fxBus";
+import { QualityProvider } from "./engine/QualityContext";
+import { Viewport } from "./engine/Viewport";
+import { useSettle } from "./engine/useSettle";
+import { getMap, DEFAULT_MAP_ID, mapChoices } from "./content/maps";
+import { getCar } from "./content/cars";
+import { useGarage } from "./useGarage";
+import Garage from "./Garage";
 import { quietThirdPartyDeprecations } from "./quietDeprecations";
 
 // Drop known-benign third-party (three/Rapier) deprecation console noise as soon
@@ -37,12 +44,17 @@ export default function CrashCourse() {
   const { host, highScore } = useCartridge("crash-course");
   const hostRef = useRef(host);
   hostRef.current = host;
+  const garage = useGarage();
+  const activeCar = getCar(garage.selected);
 
   const [phase, setPhase] = useState<Phase>("intro");
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const [count, setCount] = useState(3);
   const [runKey, setRunKey] = useState(0);
+  const [selectedMapId, setSelectedMapId] = useState<string>(DEFAULT_MAP_ID);
+  const map = getMap(selectedMapId);
+  const speedRef = useRef(0);
   /** performance.now() when driving began — props arm ARM_GRACE_MS later. */
   const [driveStartMs, setDriveStartMs] = useState<number | null>(null);
   const [score, setScore] = useState<ScoreState>(initialScore());
@@ -78,27 +90,13 @@ export default function CrashCourse() {
     return () => clearInterval(iv);
   }, [phase]);
 
-  // --- settle watcher: crashing -> results ---
+  // Keep a plain speed ref in sync for the settle watcher.
   useEffect(() => {
-    if (phase !== "crashing") return;
-    const started = performance.now();
-    let restSince: number | null = null;
-    const iv = setInterval(() => {
-      const now = performance.now();
-      if (hud.current.speed < SETTLE.restSpeed) {
-        restSince ??= now;
-        if (now - restSince >= SETTLE.restHoldMs) finish();
-      } else {
-        restSince = null;
-      }
-      if (now - started >= SETTLE.maxCrashMs) finish();
-    }, 150);
-    const finish = () => {
-      clearInterval(iv);
-      setPhase("results");
-    };
-    return () => clearInterval(iv);
-  }, [phase]);
+    speedRef.current = hud.current.speed;
+  });
+
+  const finishRun = useCallback(() => setPhase("results"), []);
+  useSettle(phase === "crashing", speedRef, finishRun);
 
   // --- report the score once, on entering results ---
   useEffect(() => {
@@ -139,7 +137,13 @@ export default function CrashCourse() {
   // pile settles must never keep ticking the final score up.
   const onDestroyed = useCallback((kind: PropKind) => {
     if (phaseRef.current !== "driving" && phaseRef.current !== "crashing") return;
-    setScore((prev) => registerDestruction(prev, kind, performance.now()));
+    setScore((prev) => {
+      const next = registerDestruction(prev, kind, performance.now());
+      // Escalating juice: a longer chain shakes the camera harder. fxBus.shake
+      // is clamped to 1 internally, so this can never run away.
+      fxBus.addShake(comboShake(next.multiplier));
+      return next;
+    });
   }, []);
 
   const running = phase === "driving" || phase === "crashing";
@@ -153,7 +157,14 @@ export default function CrashCourse() {
           <span className="text-[var(--crt-green)]">{score.total.toLocaleString()}</span>
         </span>
         {score.multiplier > 1 && running && (
-          <span className="px-2 py-0.5 rounded bg-[var(--accent-hot)]/30 text-[var(--accent-hot)] flicker">
+          <span
+            key={score.multiplier}
+            className="px-2 py-0.5 rounded bg-[var(--accent-hot)]/30 text-[var(--accent-hot)] flicker origin-center transition-transform duration-150"
+            style={{
+              transform: `scale(${Math.min(1.9, 1 + score.multiplier * 0.06)})`,
+              textShadow: `0 0 ${Math.min(14, score.multiplier)}px var(--accent-hot)`,
+            }}
+          >
             COMBO ×{score.multiplier}
           </span>
         )}
@@ -183,23 +194,28 @@ export default function CrashCourse() {
       >
         {/* "percentage" = PCFShadowMap. Plain `shadows` selects the now-
             deprecated PCFSoftShadowMap, which Three re-warns about every single
-            frame it renders shadows — that flood was the console spam. */}
-        <Canvas shadows="percentage" camera={{ position: [0, 6, 18], fov: 55 }}>
-          <color attach="background" args={["#2a3f6b"]} />
-          <fog attach="fog" args={["#2a3f6b", 65, 175]} />
-          <Physics gravity={[0, -19, 0]} paused={phase === "intro" || phase === "ready"}>
-            <Scene
-              key={runKey}
-              phase={phase}
-              hud={hud.current}
-              onDestroyed={onDestroyed}
-              onEnterCrash={enterCrash}
-              runKey={runKey}
-              armedAt={driveStartMs === null ? Infinity : driveStartMs + ARM_GRACE_MS}
-            />
-          </Physics>
-          <Effects />
-        </Canvas>
+            frame it renders shadows — that flood was the console spam. Viewport
+            (engine spine) owns the Canvas, dpr/shadow tier, background colour,
+            error boundary, and context-loss recovery. */}
+        <QualityProvider>
+          <Viewport background={map.theme.background} fov={55}>
+            <fog attach="fog" args={[map.theme.background, map.theme.fogNear, map.theme.fogFar]} />
+            <Physics gravity={[0, -19, 0]} paused={phase === "intro" || phase === "ready"}>
+              <Scene
+                key={runKey}
+                phase={phase}
+                hud={hud.current}
+                onDestroyed={onDestroyed}
+                onEnterCrash={enterCrash}
+                runKey={runKey}
+                armedAt={driveStartMs === null ? Infinity : driveStartMs + ARM_GRACE_MS}
+                map={map}
+                car={activeCar}
+              />
+            </Physics>
+            <Effects />
+          </Viewport>
+        </QualityProvider>
 
         {/* Countdown */}
         {phase === "ready" && (
@@ -228,6 +244,24 @@ export default function CrashCourse() {
               Drive the track, bank your 3 nitro charges, and plow into the pile at the end.
               Chain your smashes for a combo multiplier. Wreck everything.
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+              {mapChoices().map((choice) => (
+                <button
+                  key={choice.id}
+                  onClick={() => setSelectedMapId(choice.id)}
+                  className={`pixel-edge px-3 py-1 rounded font-[family-name:var(--font-mono)] text-xs ${
+                    choice.id === selectedMapId
+                      ? "bg-[var(--accent)] text-[var(--background)]"
+                      : "bg-transparent border border-[var(--border)] text-[var(--muted)]"
+                  }`}
+                >
+                  {choice.name}
+                </button>
+              ))}
+            </div>
+            <div className="mb-3 flex justify-center">
+              <Garage state={garage} />
+            </div>
             <button
               onClick={start}
               className="pixel-edge px-6 py-2 rounded bg-[var(--crt-green)] text-[var(--background)] font-[family-name:var(--font-display)] text-sm"

@@ -8,7 +8,9 @@
 
 // --- Destructibles --------------------------------------------------------
 
-export type PropKind = "crate" | "box" | "barrel" | "gold" | "car";
+export type PropKind =
+  | "crate" | "box" | "barrel" | "gold" | "car"
+  | "cone" | "hydrant" | "signpost" | "fence";
 
 /** Weighted destruction: colour/type carries the value. */
 export const PROP_VALUES: Record<PropKind, number> = {
@@ -17,12 +19,20 @@ export const PROP_VALUES: Record<PropKind, number> = {
   barrel: 50,
   gold: 200,
   car: 300,
+  cone: 15,
+  hydrant: 40,
+  fence: 30,
+  signpost: 60,
 };
 
 // --- Combo scoring --------------------------------------------------------
 
 /** Destructions chained within this window escalate the multiplier. */
-export const COMBO_WINDOW_MS = 500;
+export const COMBO_WINDOW_MS = 900;
+
+/** Hard ceiling on the combo multiplier — keeps a dense pile from spiking it
+ *  to nonsense while still letting it climb well past x10. */
+export const COMBO_MAX = 15;
 
 export interface ScoreState {
   total: number;
@@ -51,7 +61,7 @@ export function registerDestruction(
 ): ScoreState {
   const chained =
     state.lastHitMs !== null && timeMs - state.lastHitMs <= windowMs;
-  const multiplier = chained ? state.multiplier + 1 : 1;
+  const multiplier = chained ? Math.min(COMBO_MAX, state.multiplier + 1) : 1;
   const gained = PROP_VALUES[kind] * multiplier;
   return {
     total: state.total + gained,
@@ -60,6 +70,14 @@ export function registerDestruction(
     bestMultiplier: Math.max(state.bestMultiplier, multiplier),
     lastHitMs: timeMs,
   };
+}
+
+/**
+ * Screen-shake amount in [0..1] for a given combo multiplier. Modest at x1 and
+ * climbs with the combo so a big chain rattles the camera harder. Pure.
+ */
+export function comboShake(multiplier: number): number {
+  return Math.min(1, 0.25 + (multiplier - 1) * 0.06);
 }
 
 // --- Nitrous accounting ---------------------------------------------------
@@ -146,4 +164,31 @@ export function applyDamage(
  */
 export function squashScale(hits: number): number {
   return Math.max(0.45, 1 - hits * 0.12);
+}
+
+// --- Metal crumple budget --------------------------------------------------
+
+/**
+ * How much cumulative plastic deformation (in world metres of vertex push) a
+ * car body may accrue over one run before it stops caving further. Bounds the
+ * wreck so the body crumples progressively but never turns inside-out.
+ */
+export const PANEL_DEFORM_BUDGET = 2.4;
+
+export interface DeformResult {
+  /** New cumulative deformation total. */
+  used: number;
+  /** How much of `amount` was actually allowed this hit (0 when spent). */
+  applied: number;
+}
+
+/**
+ * Accrue deformation toward the budget. Returns the new total and the amount
+ * actually allowed this hit, clamped so `used` never exceeds `max` and a
+ * negative `amount` is a no-op. Pure.
+ */
+export function accrueDeform(used: number, amount: number, max: number): DeformResult {
+  const room = Math.max(0, max - used);
+  const applied = Math.max(0, Math.min(amount, room));
+  return { used: used + applied, applied };
 }

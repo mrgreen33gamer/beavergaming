@@ -19,6 +19,10 @@ const SIZE: Record<PropKind, [number, number, number]> = {
   barrel: [1.35, 1.9, 1.35],
   gold: [1.6, 1.6, 1.6],
   car: [4.2, 1.6, 2.0],
+  cone: [0.7, 1.1, 0.7],
+  hydrant: [0.6, 1.1, 0.6],
+  signpost: [0.3, 2.6, 0.3],
+  fence: [2.4, 1.4, 0.3],
 };
 
 // Styrofoam-light props fling away on contact; the "car" props stay heavy
@@ -29,6 +33,10 @@ const DENSITY: Record<PropKind, number> = {
   barrel: 0.14,
   gold: 0.2,
   car: 0.7,
+  cone: 0.05,
+  hydrant: 0.18,
+  signpost: 0.08,
+  fence: 0.09,
 };
 
 export interface DestructibleProps {
@@ -157,6 +165,20 @@ export default function Destructible({
         <mesh material={material} castShadow receiveShadow>
           <cylinderGeometry args={[size[0] / 2, size[0] / 2, size[1], 16]} />
         </mesh>
+      ) : kind === "cone" ? (
+        <mesh material={material} castShadow receiveShadow>
+          <coneGeometry args={[size[0] / 2, size[1], 16]} />
+        </mesh>
+      ) : kind === "hydrant" ? (
+        <mesh material={material} castShadow receiveShadow>
+          <cylinderGeometry args={[size[0] / 2, size[0] / 2, size[1], 14]} />
+        </mesh>
+      ) : kind === "signpost" ? (
+        <mesh material={material} castShadow receiveShadow>
+          <boxGeometry args={size} />
+        </mesh>
+      ) : kind === "fence" ? (
+        <RoundedBox args={size} radius={0.05} smoothness={2} material={material} castShadow receiveShadow />
       ) : (
         <RoundedBox
           args={size}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { RoundedBox } from "@react-three/drei";
@@ -11,20 +11,38 @@ import {
   type RapierRigidBody,
   type ContactForcePayload,
 } from "@react-three/rapier";
-import { CAR, NITROUS, IMPACT, TRACK, CAR_FX_COOLDOWN_MS } from "./config";
+import { CAR, NITROUS, IMPACT, CAR_FX_COOLDOWN_MS } from "./config";
+import { carHandling } from "./content/cars/handling";
+import type { CarDef } from "./content/cars";
 import { fxBus } from "./fxBus";
 import { debrisBus } from "./debrisBus";
 import { ModelBoundary } from "./Model";
 import { VehicleModel, type VehicleApi } from "./Vehicle";
 import { CAR_MODEL, MODEL_YAW } from "./models";
 import { initialNitrous, spendNitrous, nitrousActive, initialDamage, applyDamage } from "./scoring";
+import { isBelowKillPlane } from "./engine/physicsSafety";
+import { heightAt, normalAt, type TerrainParams } from "./engine/terrainSampler";
 import type { Phase, RunHud } from "./index";
 
 const _q = new THREE.Quaternion();
 const _fwd = new THREE.Vector3();
 const _cam = new THREE.Vector3();
 
-const SPAWN = { x: CAR.spawn[0], y: CAR.spawn[1], z: CAR.spawn[2] };
+// Cosmetic slope-tilt scratch (module scope — never allocated per frame).
+// The tilt is computed in the body's LOCAL frame (undoing its yaw-only world
+// rotation) so composing it back with the parent RigidBody's transform does
+// not double-apply the yaw: local forward is the fixed (0,0,-1) axis, and
+// only the ground normal is rotated into local space.
+const LOCAL_FORWARD = new THREE.Vector3(0, 0, -1);
+const _groundNormal = new THREE.Vector3();
+const _localUp = new THREE.Vector3();
+const _qInv = new THREE.Quaternion();
+const _look = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _back = new THREE.Vector3();
+const _tiltMat = new THREE.Matrix4();
+const _tq = new THREE.Quaternion();
+
 const CAR_GROUPS = interactionGroups(1, [0]);
 const WHEEL_RADIUS = 0.4;
 
@@ -33,12 +51,21 @@ export interface CarProps {
   hud: RunHud;
   onEnterCrash: () => void;
   armedAt: number;
+  terrain: TerrainParams;
+  car: CarDef;
+  pileZ: number;
+  spawn: [number, number, number];
 }
 
-export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
+export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car, pileZ, spawn }: CarProps) {
   const body = useRef<RapierRigidBody>(null);
+  const modelGroup = useRef<THREE.Group>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+
+  // Handling derived from the active car's stats. carHandling(starter) equals
+  // config.CAR exactly, so the starter is behavior-preserving.
+  const handling = useMemo(() => carHandling(car), [car]);
 
   const input = useRef({ throttle: false, reverse: false, left: false, right: false });
   const speed = useRef(0);
@@ -47,6 +74,12 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
   const lastFx = useRef(0);
   const vehicle = useRef<VehicleApi | null>(null);
   const damageRef = useRef(initialDamage());
+  const lastDent = useRef(0);
+
+  // Terrain-aware ride height: the car spawns/resets on top of the ground at
+  // its (x, z), not at a fixed world Y. On Downtown (amplitude 0) heightAt
+  // is always 0, so this equals spawn[1] exactly — behavior-preserving.
+  const spawnY = heightAt(terrain, spawn[0], spawn[2]) + spawn[1];
 
   useEffect(() => {
     body.current?.setEnabledRotations(false, true, false, true);
@@ -93,14 +126,14 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
     const t = b.translation();
 
     if (!Number.isFinite(t.x) || !Number.isFinite(t.y) || !Number.isFinite(t.z)) {
-      b.setTranslation(SPAWN, true);
+      b.setTranslation({ x: spawn[0], y: spawnY, z: spawn[2] }, true);
       b.setLinvel({ x: 0, y: 0, z: 0 }, true);
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
       speed.current = 0;
       return;
     }
 
-    if (t.y < -25 && !crashed.current) {
+    if (isBelowKillPlane(t.y) && !crashed.current) {
       crashed.current = true;
       b.setEnabledRotations(true, true, true, true);
       onEnterCrash();
@@ -109,11 +142,42 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
     const rot = b.rotation();
     _q.set(rot.x, rot.y, rot.z, rot.w);
     _fwd.set(0, 0, -1).applyQuaternion(_q);
+
+    // Cosmetic: tilt the visible model toward the ground slope; the physics
+    // body itself stays yaw-only (X/Z rotations locked) for control
+    // stability. Computed in the body's LOCAL frame — rotate the world
+    // ground normal by the inverse of the body's (yaw-only) rotation, and
+    // build the tilt basis from the fixed LOCAL_FORWARD axis rather than the
+    // world-space _fwd. That keeps this a pure local offset: composing it
+    // with the RigidBody's own world rotation (which R3F applies to this
+    // group's parent automatically) reproduces the intended world tilt
+    // without re-applying the yaw a second time. On flat ground the world
+    // normal is (0,1,0), which is invariant under any yaw rotation, so the
+    // local normal is always exactly (0,1,0) too -> identity basis -> no
+    // visible change, for every heading.
+    if (modelGroup.current && !crashed.current) {
+      const gn = normalAt(terrain, t.x, t.z);
+      _groundNormal.set(gn.x, gn.y, gn.z);
+      _qInv.copy(_q).invert();
+      _localUp.copy(_groundNormal).applyQuaternion(_qInv);
+      const fwdDotUp = LOCAL_FORWARD.dot(_localUp);
+      // Guard: skip when the (local) forward and up are nearly parallel —
+      // that degenerate case would normalize a near-zero vector into NaN.
+      if (Math.abs(fwdDotUp) < 0.98) {
+        _look.copy(LOCAL_FORWARD).addScaledVector(_localUp, -fwdDotUp).normalize();
+        _right.copy(_look).cross(_localUp).normalize();
+        _back.copy(_look).negate();
+        _tiltMat.makeBasis(_right, _localUp, _back);
+        _tq.setFromRotationMatrix(_tiltMat);
+        modelGroup.current.quaternion.slerp(_tq, 1 - Math.pow(0.0001, dt));
+      }
+    }
+
     const boost = nitrousActive(nitrous.current, now);
 
     if (phaseRef.current === "driving") {
-      const top = CAR.topSpeed * (boost ? NITROUS.speedMult : 1);
-      const accel = CAR.accel * (boost ? NITROUS.accelMult : 1);
+      const top = handling.topSpeed * (boost ? NITROUS.speedMult : 1);
+      const accel = handling.accel * (boost ? NITROUS.accelMult : 1);
       const target = input.current.throttle ? top : input.current.reverse ? -CAR.reverseSpeed : 0;
       const ds = target - speed.current;
       speed.current += Math.sign(ds) * Math.min(Math.abs(ds), accel * dt);
@@ -124,10 +188,10 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
       const steer = (input.current.left ? 1 : 0) - (input.current.right ? 1 : 0);
       const speedFactor = Math.min(1, Math.abs(speed.current) / CAR.steerSpeedRef);
       const dir = speed.current >= 0 ? 1 : -1;
-      b.setAngvel({ x: 0, y: steer * CAR.steerRate * speedFactor * dir, z: 0 }, true);
+      b.setAngvel({ x: 0, y: steer * handling.steerRate * speedFactor * dir, z: 0 }, true);
     }
 
-    if (!crashed.current && t.z < TRACK.pileZ + 18) {
+    if (!crashed.current && t.z < pileZ + 18) {
       crashed.current = true;
       b.setEnabledRotations(true, true, true, true);
       onEnterCrash();
@@ -168,31 +232,35 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
       lastFx.current = now;
       fxBus.triggerImpact(t.x, t.y + 0.4, t.z, Math.min(1, mag / (IMPACT.carDamageForce * 1.4)));
     }
-    if (mag < IMPACT.carDamageForce || now < armedAt) return;
+    if (now < armedAt) return;
 
+    // --- Light crumple path: dents on ordinary impacts. -------------------
+    if (mag >= IMPACT.dentForce && now - lastDent.current > IMPACT.dentCooldownMs) {
+      lastDent.current = now;
+      const o = p.other.rigidBody?.translation();
+      let px = t.x, py = t.y + 0.2, pz = t.z;
+      let dx = _fwd.x, dy = -0.2, dz = _fwd.z;
+      if (o) {
+        const vx = o.x - t.x, vy = o.y - t.y, vz = o.z - t.z;
+        const dist = Math.hypot(vx, vy, vz) || 1;
+        const nx = vx / dist, ny = vy / dist, nz = vz / dist;
+        const reach = Math.min(dist, 2.2);
+        px = t.x + nx * reach; py = t.y + ny * reach; pz = t.z + nz * reach;
+        dx = -nx; dy = -Math.abs(ny) * 0.5 - 0.1; dz = -nz;
+      }
+      vehicle.current?.dent(
+        new THREE.Vector3(px, py, pz),
+        new THREE.Vector3(dx, dy, dz).normalize(),
+        Math.min(0.9, 0.3 + mag / 6000),
+      );
+    }
+
+    // --- Heavy path: shed a real part on genuine slams only. --------------
+    if (mag < handling.damageForce) return;
     const res = applyDamage(damageRef.current, now, IMPACT.carDamageCooldownMs);
     if (!res.applied) return;
     damageRef.current = res.state;
 
-    // Impact point + inward direction, from the other body's position.
-    const o = p.other.rigidBody?.translation();
-    let px = t.x, py = t.y + 0.2, pz = t.z;
-    let dx = _fwd.x, dy = -0.2, dz = _fwd.z;
-    if (o) {
-      const vx = o.x - t.x, vy = o.y - t.y, vz = o.z - t.z;
-      const dist = Math.hypot(vx, vy, vz) || 1;
-      const nx = vx / dist, ny = vy / dist, nz = vz / dist;
-      const reach = Math.min(dist, 2.2);
-      px = t.x + nx * reach; py = t.y + ny * reach; pz = t.z + nz * reach;
-      dx = -nx; dy = -Math.abs(ny) * 0.5 - 0.1; dz = -nz;
-    }
-    vehicle.current?.dent(
-      new THREE.Vector3(px, py, pz),
-      new THREE.Vector3(dx, dy, dz).normalize(),
-      Math.min(0.7, 0.25 + mag / 8000),
-    );
-
-    // Shed a real part (wheel/spoiler) from the car at the impact.
     const part = vehicle.current?.detachNext();
     if (part) {
       const lv = b.linvel();
@@ -210,18 +278,20 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
       type="dynamic"
       colliders={false}
       collisionGroups={CAR_GROUPS}
-      position={[SPAWN.x, SPAWN.y, SPAWN.z]}
-      density={CAR.density}
+      position={[spawn[0], spawnY, spawn[2]]}
+      density={handling.density}
       linearDamping={CAR.linearDamping}
       angularDamping={CAR.angularDamping}
       onContactForce={onCarContact}
     >
       <CuboidCollider args={[1.1, 0.5, 2.3]} collisionGroups={CAR_GROUPS} />
-      <ModelBoundary fallback={<ProceduralCar />}>
-        <Suspense fallback={<ProceduralCar />}>
-          <VehicleModel url={CAR_MODEL} fit={4.6} baseY={-0.5} yaw={MODEL_YAW.car} apiRef={vehicle} />
-        </Suspense>
-      </ModelBoundary>
+      <group ref={modelGroup}>
+        <ModelBoundary fallback={<ProceduralCar />}>
+          <Suspense fallback={<ProceduralCar />}>
+            <VehicleModel url={CAR_MODEL} fit={4.6} baseY={-0.5} yaw={MODEL_YAW.car} apiRef={vehicle} />
+          </Suspense>
+        </ModelBoundary>
+      </group>
     </RigidBody>
   );
 }

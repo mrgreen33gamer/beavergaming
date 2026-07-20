@@ -34,10 +34,9 @@ function isSilenced(args: unknown[]): boolean {
 }
 
 /**
- * Patch console.warn/log/error to drop the allow-listed third-party deprecation
- * lines. No-op on the server and after the first call. Idempotent and safe to
- * import at module load (the crash-course chunk only loads when a player opens
- * the game).
+ * Patch console.warn/log to drop the allow-listed third-party deprecation lines.
+ * No-op on the server and after the first call. Idempotent and safe to import at
+ * module load (the crash-course chunk only loads when a player opens the game).
  */
 export function quietThirdPartyDeprecations(): void {
   if (installed || typeof window === "undefined") return;
