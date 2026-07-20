@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { useCartridge } from "@/lib/platform/useCartridge";
@@ -115,18 +115,27 @@ export default function CrashCourse() {
     setPhase("ready");
   };
 
+  // Both callbacks are stable (empty deps) so a score update never changes the
+  // props handed to <Scene>/<Effects>. Combined with memoising those two, a
+  // crash that fires dozens of setScore calls per second no longer re-renders
+  // the whole 3D tree or rebuilds the post-processing composer each time — that
+  // reconciliation storm was what stalled frames and flashed the screen black.
+  //
   // The finale is triggered ONLY by the car reaching the pile — never by a
   // destruction event. Otherwise the pile settling on physics-unpause counts
   // as "destruction" and ends the run before the player can drive.
-  const enterCrash = () => setPhase((p) => (p === "driving" ? "crashing" : p));
+  const enterCrash = useCallback(
+    () => setPhase((p) => (p === "driving" ? "crashing" : p)),
+    [],
+  );
 
   // Score only accrues while the run is live. Once the settle watcher flips us
   // to "results", the number is frozen — props still nudging each other as the
   // pile settles must never keep ticking the final score up.
-  const onDestroyed = (kind: PropKind) => {
+  const onDestroyed = useCallback((kind: PropKind) => {
     if (phaseRef.current !== "driving" && phaseRef.current !== "crashing") return;
     setScore((prev) => registerDestruction(prev, kind, performance.now()));
-  };
+  }, []);
 
   const running = phase === "driving" || phase === "crashing";
 

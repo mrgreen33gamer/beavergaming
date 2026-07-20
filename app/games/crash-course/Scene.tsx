@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { RigidBody } from "@react-three/rapier";
 import Car from "./Car";
@@ -67,7 +67,7 @@ export interface SceneProps {
   armedAt: number;
 }
 
-export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt }: SceneProps) {
+function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt }: SceneProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const props = useMemo(() => [...buildFinale(TRACK.pileZ), ...buildTrackStructures()], [runKey]);
   const halfW = TRACK.width / 2;
@@ -170,3 +170,8 @@ export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, a
     </>
   );
 }
+
+// Memoised: its props (phase, the stable hud ref, the stable callbacks, runKey,
+// armedAt) don't change on a score update, so score-driven parent re-renders no
+// longer reconcile the entire destructible tree mid-crash.
+export default memo(Scene);

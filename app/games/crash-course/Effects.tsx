@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
@@ -19,7 +19,7 @@ interface Particle {
  * pool driven by the fxBus. Bloom is what makes the gold props, the nitro, and
  * the impact sparks actually glow rather than sit flat.
  */
-export default function Effects() {
+function Effects() {
   const mesh = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const pool = useRef<Particle[]>([]);
@@ -111,3 +111,8 @@ export default function Effects() {
     </>
   );
 }
+
+// Takes no props, so memo makes it render exactly once. A score update in the
+// parent can no longer re-render this and rebuild the EffectComposer passes —
+// that rebuild was a source of the black flash on heavy crashes.
+export default memo(Effects);
