@@ -4,11 +4,26 @@
  * Phase 2 without touching this shape. Pure: no React, no Three.
  */
 import { downtown } from "./downtown";
+import { hills } from "./hills";
+import { highway } from "./highway";
+import { canyon } from "./canyon";
 
 export interface MapTheme {
+  /** Sky + fog colour (hex). */
   background: string;
   fogNear: number;
   fogFar: number;
+  /** Terrain mesh colour (hex). */
+  groundColor: string;
+  /** Key/sun directional light. */
+  sunColor: string;
+  sunIntensity: number;
+  /** Flat fill ambient intensity. */
+  ambientIntensity: number;
+  /** Hemisphere light: sky tint, ground tint, intensity. */
+  hemiSky: string;
+  hemiGround: string;
+  hemiIntensity: number;
 }
 
 export interface TerrainParams {
@@ -29,7 +44,7 @@ export interface MapDef {
   trackWidth: number;
 }
 
-export const MAPS: MapDef[] = [downtown];
+export const MAPS: MapDef[] = [downtown, hills, highway, canyon];
 
 export const DEFAULT_MAP_ID = "downtown";
 
