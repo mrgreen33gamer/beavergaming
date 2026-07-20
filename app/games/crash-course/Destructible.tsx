@@ -165,6 +165,20 @@ export default function Destructible({
         <mesh material={material} castShadow receiveShadow>
           <cylinderGeometry args={[size[0] / 2, size[0] / 2, size[1], 16]} />
         </mesh>
+      ) : kind === "cone" ? (
+        <mesh material={material} castShadow receiveShadow>
+          <coneGeometry args={[size[0] / 2, size[1], 16]} />
+        </mesh>
+      ) : kind === "hydrant" ? (
+        <mesh material={material} castShadow receiveShadow>
+          <cylinderGeometry args={[size[0] / 2, size[0] / 2, size[1], 14]} />
+        </mesh>
+      ) : kind === "signpost" ? (
+        <mesh material={material} castShadow receiveShadow>
+          <boxGeometry args={size} />
+        </mesh>
+      ) : kind === "fence" ? (
+        <RoundedBox args={size} radius={0.05} smoothness={2} material={material} castShadow receiveShadow />
       ) : (
         <RoundedBox
           args={size}

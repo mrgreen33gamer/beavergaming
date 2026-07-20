@@ -58,6 +58,15 @@ function pack(x: number, z: number, out: PileItem[]) {
   out.push({ kind: "crate", position: [x + 0.9, 2.2, z - 0.9] });
 }
 
+/** A roadside dressing of light street props around a point. */
+function streetDressing(x: number, z: number, out: PileItem[]) {
+  out.push({ kind: "cone", position: [x, 0.55, z] });
+  out.push({ kind: "cone", position: [x + 1.0, 0.55, z + 0.6] });
+  out.push({ kind: "hydrant", position: [x - 1.2, 0.55, z] });
+  out.push({ kind: "signpost", position: [x + 2.0, 1.3, z - 0.5] });
+  out.push({ kind: "fence", position: [x - 0.4, 0.7, z - 1.4] });
+}
+
 /** The end-of-track finale: a wall of structures, ~5x taller than before. */
 export function buildFinale(pileZ: number): PileItem[] {
   const out: PileItem[] = [];
@@ -105,6 +114,8 @@ export function buildTrackStructures(): PileItem[] {
   });
   out.push({ kind: "car", position: [-6, 1.0, -26] });
   out.push({ kind: "car", position: [6, 1.0, -46] });
+  streetDressing(-8, -14, out);
+  streetDressing(9, -38, out);
   return out;
 }
 
