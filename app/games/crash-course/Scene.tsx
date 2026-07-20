@@ -147,7 +147,7 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: 
         <meshStandardMaterial color="#ffd24a" emissive="#ffd24a" emissiveIntensity={1.0} toneMapped={false} depthWrite={false} polygonOffset polygonOffsetFactor={-2} />
       </mesh>
 
-      <Car phase={phase} hud={hud} onEnterCrash={onEnterCrash} armedAt={armedAt} />
+      <Car phase={phase} hud={hud} onEnterCrash={onEnterCrash} armedAt={armedAt} terrain={map.terrain} />
       <DebrisManager />
 
       {props.map((item, i) => (

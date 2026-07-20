@@ -18,11 +18,28 @@ import { ModelBoundary } from "./Model";
 import { VehicleModel, type VehicleApi } from "./Vehicle";
 import { CAR_MODEL, MODEL_YAW } from "./models";
 import { initialNitrous, spendNitrous, nitrousActive, initialDamage, applyDamage } from "./scoring";
+import { isBelowKillPlane } from "./engine/physicsSafety";
+import { heightAt, normalAt, type TerrainParams } from "./engine/terrain";
 import type { Phase, RunHud } from "./index";
 
 const _q = new THREE.Quaternion();
 const _fwd = new THREE.Vector3();
 const _cam = new THREE.Vector3();
+
+// Cosmetic slope-tilt scratch (module scope — never allocated per frame).
+// The tilt is computed in the body's LOCAL frame (undoing its yaw-only world
+// rotation) so composing it back with the parent RigidBody's transform does
+// not double-apply the yaw: local forward is the fixed (0,0,-1) axis, and
+// only the ground normal is rotated into local space.
+const LOCAL_FORWARD = new THREE.Vector3(0, 0, -1);
+const _groundNormal = new THREE.Vector3();
+const _localUp = new THREE.Vector3();
+const _qInv = new THREE.Quaternion();
+const _look = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _back = new THREE.Vector3();
+const _tiltMat = new THREE.Matrix4();
+const _tq = new THREE.Quaternion();
 
 const SPAWN = { x: CAR.spawn[0], y: CAR.spawn[1], z: CAR.spawn[2] };
 const CAR_GROUPS = interactionGroups(1, [0]);
@@ -33,10 +50,12 @@ export interface CarProps {
   hud: RunHud;
   onEnterCrash: () => void;
   armedAt: number;
+  terrain: TerrainParams;
 }
 
-export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
+export default function Car({ phase, hud, onEnterCrash, armedAt, terrain }: CarProps) {
   const body = useRef<RapierRigidBody>(null);
+  const modelGroup = useRef<THREE.Group>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
 
@@ -47,6 +66,11 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
   const lastFx = useRef(0);
   const vehicle = useRef<VehicleApi | null>(null);
   const damageRef = useRef(initialDamage());
+
+  // Terrain-aware ride height: the car spawns/resets on top of the ground at
+  // its (x, z), not at a fixed world Y. On Downtown (amplitude 0) heightAt
+  // is always 0, so this equals CAR.spawn[1] exactly — behavior-preserving.
+  const spawnY = heightAt(terrain, SPAWN.x, SPAWN.z) + CAR.spawn[1];
 
   useEffect(() => {
     body.current?.setEnabledRotations(false, true, false, true);
@@ -93,14 +117,14 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
     const t = b.translation();
 
     if (!Number.isFinite(t.x) || !Number.isFinite(t.y) || !Number.isFinite(t.z)) {
-      b.setTranslation(SPAWN, true);
+      b.setTranslation({ x: SPAWN.x, y: spawnY, z: SPAWN.z }, true);
       b.setLinvel({ x: 0, y: 0, z: 0 }, true);
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
       speed.current = 0;
       return;
     }
 
-    if (t.y < -25 && !crashed.current) {
+    if (isBelowKillPlane(t.y) && !crashed.current) {
       crashed.current = true;
       b.setEnabledRotations(true, true, true, true);
       onEnterCrash();
@@ -109,6 +133,37 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
     const rot = b.rotation();
     _q.set(rot.x, rot.y, rot.z, rot.w);
     _fwd.set(0, 0, -1).applyQuaternion(_q);
+
+    // Cosmetic: tilt the visible model toward the ground slope; the physics
+    // body itself stays yaw-only (X/Z rotations locked) for control
+    // stability. Computed in the body's LOCAL frame — rotate the world
+    // ground normal by the inverse of the body's (yaw-only) rotation, and
+    // build the tilt basis from the fixed LOCAL_FORWARD axis rather than the
+    // world-space _fwd. That keeps this a pure local offset: composing it
+    // with the RigidBody's own world rotation (which R3F applies to this
+    // group's parent automatically) reproduces the intended world tilt
+    // without re-applying the yaw a second time. On flat ground the world
+    // normal is (0,1,0), which is invariant under any yaw rotation, so the
+    // local normal is always exactly (0,1,0) too -> identity basis -> no
+    // visible change, for every heading.
+    if (modelGroup.current && !crashed.current) {
+      const gn = normalAt(terrain, t.x, t.z);
+      _groundNormal.set(gn.x, gn.y, gn.z);
+      _qInv.copy(_q).invert();
+      _localUp.copy(_groundNormal).applyQuaternion(_qInv);
+      const fwdDotUp = LOCAL_FORWARD.dot(_localUp);
+      // Guard: skip when the (local) forward and up are nearly parallel —
+      // that degenerate case would normalize a near-zero vector into NaN.
+      if (Math.abs(fwdDotUp) < 0.98) {
+        _look.copy(LOCAL_FORWARD).addScaledVector(_localUp, -fwdDotUp).normalize();
+        _right.copy(_look).cross(_localUp).normalize();
+        _back.copy(_look).negate();
+        _tiltMat.makeBasis(_right, _localUp, _back);
+        _tq.setFromRotationMatrix(_tiltMat);
+        modelGroup.current.quaternion.slerp(_tq, 1 - Math.pow(0.0001, dt));
+      }
+    }
+
     const boost = nitrousActive(nitrous.current, now);
 
     if (phaseRef.current === "driving") {
@@ -210,18 +265,20 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
       type="dynamic"
       colliders={false}
       collisionGroups={CAR_GROUPS}
-      position={[SPAWN.x, SPAWN.y, SPAWN.z]}
+      position={[SPAWN.x, spawnY, SPAWN.z]}
       density={CAR.density}
       linearDamping={CAR.linearDamping}
       angularDamping={CAR.angularDamping}
       onContactForce={onCarContact}
     >
       <CuboidCollider args={[1.1, 0.5, 2.3]} collisionGroups={CAR_GROUPS} />
-      <ModelBoundary fallback={<ProceduralCar />}>
-        <Suspense fallback={<ProceduralCar />}>
-          <VehicleModel url={CAR_MODEL} fit={4.6} baseY={-0.5} yaw={MODEL_YAW.car} apiRef={vehicle} />
-        </Suspense>
-      </ModelBoundary>
+      <group ref={modelGroup}>
+        <ModelBoundary fallback={<ProceduralCar />}>
+          <Suspense fallback={<ProceduralCar />}>
+            <VehicleModel url={CAR_MODEL} fit={4.6} baseY={-0.5} yaw={MODEL_YAW.car} apiRef={vehicle} />
+          </Suspense>
+        </ModelBoundary>
+      </group>
     </RigidBody>
   );
 }
