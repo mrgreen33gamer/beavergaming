@@ -21,6 +21,11 @@ import { getMap, DEFAULT_MAP_ID, mapChoices } from "./content/maps";
 import { getCar } from "./content/cars";
 import { useGarage } from "./useGarage";
 import Garage from "./Garage";
+import { quietThirdPartyDeprecations } from "./quietDeprecations";
+
+// Drop known-benign third-party (three/Rapier) deprecation console noise as soon
+// as the game chunk loads — before the Canvas/Physics initialise and emit them.
+quietThirdPartyDeprecations();
 
 export type Phase = "intro" | "ready" | "driving" | "crashing" | "results";
 
