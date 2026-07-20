@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import * as THREE from "three";
 import { RigidBody } from "@react-three/rapier";
-import { Environment, Lightformer } from "@react-three/drei";
 import Car from "./Car";
 import Destructible from "./Destructible";
 import { TRACK } from "./config";
@@ -15,11 +15,9 @@ interface PileItem {
   drift?: [number, number];
 }
 
-/** The end-of-track destruction pile: big, light props that shove easily. */
 function buildPile(): PileItem[] {
   const items: PileItem[] = [];
   const z0 = TRACK.pileZ;
-
   for (let layer = 0; layer < 3; layer++) {
     const halfX = 3 - layer;
     const rows = 5 - layer;
@@ -37,7 +35,6 @@ function buildPile(): PileItem[] {
       }
     }
   }
-
   items.push({ kind: "car", position: [-5, 1.0, z0 - 2] });
   items.push({ kind: "car", position: [5, 1.0, z0 - 6] });
   items.push({ kind: "car", position: [0, 1.0, z0 - 11] });
@@ -46,7 +43,6 @@ function buildPile(): PileItem[] {
   return items;
 }
 
-/** Smashables down the whole track so the drive is full of things to hit. */
 function buildTrackClusters(): PileItem[] {
   const items: PileItem[] = [];
   const zs = [-8, -20, -32, -44, -54];
@@ -63,14 +59,38 @@ function buildTrackClusters(): PileItem[] {
   return items;
 }
 
-/** A fixed launch ramp. Driving toward -z climbs the low (+z) edge. */
-function Ramp({ x, z, w, len, angle }: { x: number; z: number; w: number; len: number; angle: number }) {
-  const cy = (len / 2) * Math.sin(angle);
+/** A right-triangular-prism ramp: the low front edge meets the ground on a
+ *  line, rising to the back — a real wedge, not a floating tilted box. */
+function wedgeGeometry(w: number, h: number, len: number): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  const hw = w / 2, hl = len / 2;
+  const v = new Float32Array([
+    -hw, 0, hl,   // 0 front-bottom-left  (ground edge)
+    hw, 0, hl,    // 1 front-bottom-right (ground edge)
+    hw, 0, -hl,   // 2 back-bottom-right
+    -hw, 0, -hl,  // 3 back-bottom-left
+    hw, h, -hl,   // 4 back-top-right
+    -hw, h, -hl,  // 5 back-top-left
+  ]);
+  g.setAttribute("position", new THREE.BufferAttribute(v, 3));
+  g.setIndex([
+    0, 3, 2, 0, 2, 1, // bottom
+    0, 1, 4, 0, 4, 5, // incline (drive surface)
+    3, 5, 4, 3, 4, 2, // back
+    0, 5, 3, // left
+    1, 2, 4, // right
+  ]);
+  g.computeVertexNormals();
+  return g;
+}
+
+function Ramp({ x, z, w, h, len }: { x: number; z: number; w: number; h: number; len: number }) {
+  const geo = useMemo(() => wedgeGeometry(w, h, len), [w, h, len]);
+  useEffect(() => () => geo.dispose(), [geo]);
   return (
-    <RigidBody type="fixed" colliders="cuboid" position={[x, cy, z]} rotation={[angle, 0, 0]}>
-      <mesh receiveShadow castShadow>
-        <boxGeometry args={[w, 0.5, len]} />
-        <meshStandardMaterial color="#e0672a" roughness={0.7} metalness={0.1} />
+    <RigidBody type="fixed" colliders="hull" position={[x, 0, z]}>
+      <mesh geometry={geo} castShadow receiveShadow>
+        <meshStandardMaterial color="#e0672a" roughness={0.7} metalness={0.1} side={THREE.DoubleSide} />
       </mesh>
     </RigidBody>
   );
@@ -78,19 +98,19 @@ function Ramp({ x, z, w, len, angle }: { x: number; z: number; w: number; len: n
 
 function Building({ x, z, w, h, d, color }: { x: number; z: number; w: number; h: number; d: number; color: string }) {
   const rows = Math.max(2, Math.floor(h / 3));
-  const face = x > 0 ? -w / 2 - 0.02 : w / 2 + 0.02;
+  const face = x > 0 ? -w / 2 - 0.08 : w / 2 + 0.08;
   const winY: number[] = [];
   for (let r = 1; r <= rows; r++) winY.push((r / (rows + 1)) * h - h / 2);
   return (
     <group position={[x, h / 2 - 0.5, z]}>
-      <mesh castShadow receiveShadow>
+      <mesh receiveShadow>
         <boxGeometry args={[w, h, d]} />
         <meshStandardMaterial color={color} roughness={0.7} metalness={0.15} />
       </mesh>
       {winY.map((y, i) => (
         <mesh key={i} position={[face, y, 0]} rotation={[0, x > 0 ? Math.PI : 0, 0]}>
           <planeGeometry args={[w * 0.7, 0.55]} />
-          <meshStandardMaterial color="#ffe6a0" emissive="#ffcf6a" emissiveIntensity={1.1} toneMapped={false} />
+          <meshStandardMaterial color="#ffe6a0" emissive="#ffcf6a" emissiveIntensity={1.0} toneMapped={false} depthWrite={false} />
         </mesh>
       ))}
     </group>
@@ -126,29 +146,24 @@ export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, a
 
   return (
     <>
-      <Environment resolution={128}>
-        <Lightformer intensity={2.2} position={[0, 9, -14]} scale={[16, 8, 1]} color="#fff2dd" />
-        <Lightformer intensity={1.4} position={[-12, 6, 6]} rotation={[0, Math.PI / 2, 0]} scale={[14, 8, 1]} color="#8fb2ff" />
-        <Lightformer intensity={1.4} position={[12, 6, 6]} rotation={[0, -Math.PI / 2, 0]} scale={[14, 8, 1]} color="#ffab63" />
-      </Environment>
-
-      <ambientLight intensity={0.5} />
-      <hemisphereLight args={["#bcd8ff", "#3a2e22", 0.7]} />
+      <ambientLight intensity={0.55} />
+      <hemisphereLight args={["#bcd8ff", "#3a2e22", 0.8]} />
       <directionalLight
         castShadow
         color="#fff2e0"
         position={[26, 36, 20]}
-        intensity={1.7}
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-80}
-        shadow-camera-right={80}
-        shadow-camera-top={80}
-        shadow-camera-bottom={-80}
-        shadow-camera-far={180}
+        intensity={1.8}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-left={-55}
+        shadow-camera-right={55}
+        shadow-camera-top={55}
+        shadow-camera-bottom={-55}
+        shadow-camera-far={150}
+        shadow-bias={-0.0005}
       />
       <directionalLight color="#7aa0ff" position={[-20, 16, -12]} intensity={0.5} />
-      <pointLight position={[0, 8, TRACK.pileZ]} intensity={90} distance={60} decay={2} color="#ffb060" />
+      <pointLight position={[0, 8, TRACK.pileZ]} intensity={40} distance={55} decay={2} color="#ffb060" />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.06, groundCenterZ]} receiveShadow>
         <planeGeometry args={[600, 600]} />
@@ -163,25 +178,24 @@ export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, a
       </RigidBody>
 
       {laneMarks.map((z) => (
-        <mesh key={z} position={[0, 0.02, z]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh key={z} position={[0, 0.12, z]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[0.5, 2.6]} />
-          <meshStandardMaterial color="#ffe08a" emissive="#ffcf5a" emissiveIntensity={1.5} toneMapped={false} />
+          <meshStandardMaterial color="#ffe08a" emissive="#ffcf5a" emissiveIntensity={1.3} toneMapped={false} depthWrite={false} polygonOffset polygonOffsetFactor={-2} />
         </mesh>
       ))}
 
       {[-1, 1].map((s) => (
         <RigidBody key={s} type="fixed" colliders="cuboid" position={[s * halfW, TRACK.wallHeight / 2, groundCenterZ]}>
-          <mesh receiveShadow castShadow>
+          <mesh receiveShadow>
             <boxGeometry args={[0.6, TRACK.wallHeight, groundLen]} />
             <meshStandardMaterial color="#5a4570" roughness={0.7} metalness={0.2} />
           </mesh>
         </RigidBody>
       ))}
 
-      {/* Launch ramps */}
-      <Ramp x={0} z={-12} w={10} len={9} angle={0.26} />
-      <Ramp x={-9} z={-34} w={8} len={8} angle={0.24} />
-      <Ramp x={9} z={-52} w={8} len={9} angle={0.28} />
+      <Ramp x={0} z={-12} w={10} h={2.2} len={9} />
+      <Ramp x={-9} z={-34} w={8} h={2} len={8} />
+      <Ramp x={9} z={-52} w={8} h={2.4} len={9} />
 
       {buildings.map((b, i) => (
         <Building key={i} {...b} />
@@ -194,9 +208,9 @@ export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, a
         </mesh>
       </RigidBody>
 
-      <mesh position={[0, 0.03, TRACK.pileZ + 16]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 0.14, TRACK.pileZ + 16]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[TRACK.width, 1.8]} />
-        <meshStandardMaterial color="#ffd24a" emissive="#ffd24a" emissiveIntensity={1.2} toneMapped={false} />
+        <meshStandardMaterial color="#ffd24a" emissive="#ffd24a" emissiveIntensity={1.0} toneMapped={false} depthWrite={false} polygonOffset polygonOffsetFactor={-2} />
       </mesh>
 
       <Car phase={phase} hud={hud} onEnterCrash={onEnterCrash} armedAt={armedAt} />

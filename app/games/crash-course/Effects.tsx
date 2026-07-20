@@ -99,14 +99,14 @@ export default function Effects() {
         args={[geo, mat, MAX_PARTICLES]}
         frustumCulled={false}
       />
-      <EffectComposer multisampling={4}>
+      <EffectComposer multisampling={2}>
         <Bloom
-          intensity={0.85}
-          luminanceThreshold={0.55}
-          luminanceSmoothing={0.25}
+          intensity={0.5}
+          luminanceThreshold={0.8}
+          luminanceSmoothing={0.3}
           mipmapBlur
         />
-        <Vignette offset={0.25} darkness={0.72} />
+        <Vignette offset={0.3} darkness={0.6} />
       </EffectComposer>
     </>
   );
