@@ -58,9 +58,12 @@ export interface CarProps {
   phase: Phase;
   hud: RunHud;
   onEnterCrash: () => void;
+  /** performance.now() after which the car can take damage (so the settling
+   *  spawn-drop can't shed a part). */
+  armedAt: number;
 }
 
-export default function Car({ phase, hud, onEnterCrash }: CarProps) {
+export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
   const body = useRef<RapierRigidBody>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
@@ -195,7 +198,7 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
       const t = b.translation();
       fxBus.triggerImpact(t.x, t.y + 0.4, t.z, Math.min(1, mag / (IMPACT.carDamageForce * 1.4)));
     }
-    if (mag < IMPACT.carDamageForce) return;
+    if (mag < IMPACT.carDamageForce || now < armedAt) return;
     const res = applyDamage(damageRef.current, now, IMPACT.carDamageCooldownMs);
     if (!res.applied) return;
     damageRef.current = res.state;
@@ -251,12 +254,12 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
         angularDamping={CAR.angularDamping}
         onContactForce={(p) => onContactForce(p.totalForceMagnitude)}
       >
-        <CuboidCollider args={[0.9, 0.35, 1.8]} collisionGroups={CAR_GROUPS} />
+        <CuboidCollider args={[1.1, 0.5, 2.3]} collisionGroups={CAR_GROUPS} />
         <group scale={dent} rotation={[tiltX, 0, tiltZ]}>
           <ModelOrShape
             url={CAR_MODEL}
-            fit={3.6}
-            baseY={-0.35}
+            fit={4.6}
+            baseY={-0.5}
             yaw={MODEL_YAW.car}
             fallback={<ProceduralCar />}
           />

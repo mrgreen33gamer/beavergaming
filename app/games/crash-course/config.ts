@@ -19,7 +19,7 @@ export const CAR = {
   linearDamping: 0.6,
   angularDamping: 4,
   density: 1.1, // Rapier derives mass from collider density
-  spawn: [0, 1.2, 6] as const, // start near the top of the track
+  spawn: [0, 0.75, 8] as const, // basically on the ground so the drop can't dent it
 };
 
 // --- Nitrous: 3 charges, moderate boost, control not launch ---------------
@@ -33,9 +33,9 @@ export const NITROUS = {
 
 // --- Track ----------------------------------------------------------------
 export const TRACK = {
-  width: 22,
+  width: 34, // wide open — plenty of room to line up hits and weave
   length: 150, // runs from +z (start) toward -z (pile)
-  wallHeight: 2,
+  wallHeight: 2.5,
   /** Slight downhill toward the pile so speed builds into the finale. */
   drop: 6,
   pileZ: -66, // where the destruction zone sits
@@ -51,7 +51,7 @@ export const IMPACT = {
   /** Min ms between successive car-damage events (rate limit). */
   carDamageCooldownMs: 220,
   /** Extra impulse added to a destroyed body for drama. */
-  scatterImpulse: 9,
+  scatterImpulse: 14,
 };
 
 /** Props ignore impacts for this long after a run starts, so the settling

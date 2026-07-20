@@ -162,8 +162,8 @@ export default function CrashCourse() {
         style={{ aspectRatio: "16 / 9" }}
       >
         <Canvas shadows camera={{ position: [0, 6, 18], fov: 55 }}>
-          <color attach="background" args={["#10131c"]} />
-          <fog attach="fog" args={["#10131c", 45, 140]} />
+          <color attach="background" args={["#2a3f6b"]} />
+          <fog attach="fog" args={["#2a3f6b", 65, 175]} />
           <Physics gravity={[0, -19, 0]} paused={phase === "intro" || phase === "ready"}>
             <Scene
               key={runKey}

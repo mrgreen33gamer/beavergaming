@@ -13,19 +13,20 @@ import type { PropKind } from "./scoring";
 
 /** Box dimensions per kind (metres). Cars are much bigger and heavier. */
 const SIZE: Record<PropKind, [number, number, number]> = {
-  crate: [1, 1, 1],
-  box: [1.2, 1.2, 1.2],
-  barrel: [0.95, 1.3, 0.95],
-  gold: [1, 1, 1],
-  car: [3.4, 1.3, 1.7],
+  crate: [1.6, 1.6, 1.6],
+  box: [1.9, 1.9, 1.9],
+  barrel: [1.35, 1.9, 1.35],
+  gold: [1.6, 1.6, 1.6],
+  car: [4.2, 1.6, 2.0],
 };
 
+// Light, so the car shoves them around easily.
 const DENSITY: Record<PropKind, number> = {
-  crate: 0.4,
-  box: 0.5,
-  barrel: 0.6,
-  gold: 0.7,
-  car: 1.2,
+  crate: 0.28,
+  box: 0.32,
+  barrel: 0.4,
+  gold: 0.5,
+  car: 0.9,
 };
 
 export interface DestructibleProps {
