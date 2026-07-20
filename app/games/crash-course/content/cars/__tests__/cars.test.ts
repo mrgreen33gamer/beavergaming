@@ -30,4 +30,30 @@ describe("car registry", () => {
     expect(s.topSpeed).toBe(34);
     expect(s.accel).toBe(26);
   });
+
+  it("ships four cars in ascending price tiers", () => {
+    const prices = CARS.map((c) => c.price);
+    expect(prices).toEqual([0, 1500, 4000, 9000]);
+    expect(CARS.map((c) => c.id)).toEqual([
+      "rust-bucket",
+      "muscle",
+      "monster-truck",
+      "demolisher",
+    ]);
+  });
+
+  it("gives each paid car a genuinely different stat profile", () => {
+    const muscle = getCar("muscle").stats;
+    const monster = getCar("monster-truck").stats;
+    const demolisher = getCar("demolisher").stats;
+    // Muscle: fast + nimble, light. Monster: heavy + tough, less nimble.
+    expect(muscle.topSpeed).toBeGreaterThan(getCar("rust-bucket").stats.topSpeed);
+    expect(monster.mass).toBeGreaterThan(muscle.mass);
+    expect(demolisher.mass).toBeGreaterThan(monster.mass);
+    expect(demolisher.durability).toBeGreaterThan(monster.durability);
+    expect(muscle.grip).toBeGreaterThan(monster.grip);
+    // No two cars share an identical stat block.
+    const blocks = new Set([muscle, monster, demolisher].map((s) => JSON.stringify(s)));
+    expect(blocks.size).toBe(3);
+  });
 });

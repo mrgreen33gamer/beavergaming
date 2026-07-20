@@ -37,6 +37,30 @@ export const CARS: CarDef[] = [
     color: "#c9552e",
     stats: { mass: 1, topSpeed: 34, accel: 26, grip: 1, durability: 3 },
   },
+  {
+    id: "muscle",
+    name: "Muscle",
+    price: 1500,
+    color: "#2f6fd6",
+    // Fast and grippy, still light — a straight upgrade in speed, not toughness.
+    stats: { mass: 1.15, topSpeed: 42, accel: 32, grip: 1.15, durability: 4 },
+  },
+  {
+    id: "monster-truck",
+    name: "Monster Truck",
+    price: 4000,
+    color: "#3fae55",
+    // Heavy and tough, sluggish steering — plows the pile, corners like a barge.
+    stats: { mass: 2.2, topSpeed: 36, accel: 22, grip: 0.8, durability: 7 },
+  },
+  {
+    id: "demolisher",
+    name: "Demolisher",
+    price: 9000,
+    color: "#b0402f",
+    // Max mass + durability, decent speed — the endgame wrecking ball.
+    stats: { mass: 3.2, topSpeed: 40, accel: 28, grip: 0.9, durability: 12 },
+  },
 ];
 
 export const STARTER_CAR_ID = "rust-bucket";
