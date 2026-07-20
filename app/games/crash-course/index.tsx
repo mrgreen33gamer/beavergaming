@@ -17,6 +17,7 @@ import { QualityProvider } from "./engine/QualityContext";
 import { Viewport } from "./engine/Viewport";
 import { useSettle } from "./engine/useSettle";
 import { getMap, DEFAULT_MAP_ID, mapChoices } from "./content/maps";
+import { getCar, STARTER_CAR_ID } from "./content/cars";
 
 export type Phase = "intro" | "ready" | "driving" | "crashing" | "results";
 
@@ -186,6 +187,7 @@ export default function CrashCourse() {
                 runKey={runKey}
                 armedAt={driveStartMs === null ? Infinity : driveStartMs + ARM_GRACE_MS}
                 map={map}
+                car={getCar(STARTER_CAR_ID)}
               />
             </Physics>
             <Effects />

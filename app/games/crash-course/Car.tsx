@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { RoundedBox } from "@react-three/drei";
@@ -12,6 +12,8 @@ import {
   type ContactForcePayload,
 } from "@react-three/rapier";
 import { CAR, NITROUS, IMPACT, TRACK, CAR_FX_COOLDOWN_MS } from "./config";
+import { carHandling } from "./content/cars/handling";
+import type { CarDef } from "./content/cars";
 import { fxBus } from "./fxBus";
 import { debrisBus } from "./debrisBus";
 import { ModelBoundary } from "./Model";
@@ -51,13 +53,18 @@ export interface CarProps {
   onEnterCrash: () => void;
   armedAt: number;
   terrain: TerrainParams;
+  car: CarDef;
 }
 
-export default function Car({ phase, hud, onEnterCrash, armedAt, terrain }: CarProps) {
+export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car }: CarProps) {
   const body = useRef<RapierRigidBody>(null);
   const modelGroup = useRef<THREE.Group>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+
+  // Handling derived from the active car's stats. carHandling(starter) equals
+  // config.CAR exactly, so the starter is behavior-preserving.
+  const handling = useMemo(() => carHandling(car), [car]);
 
   const input = useRef({ throttle: false, reverse: false, left: false, right: false });
   const speed = useRef(0);
@@ -167,8 +174,8 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain }: CarP
     const boost = nitrousActive(nitrous.current, now);
 
     if (phaseRef.current === "driving") {
-      const top = CAR.topSpeed * (boost ? NITROUS.speedMult : 1);
-      const accel = CAR.accel * (boost ? NITROUS.accelMult : 1);
+      const top = handling.topSpeed * (boost ? NITROUS.speedMult : 1);
+      const accel = handling.accel * (boost ? NITROUS.accelMult : 1);
       const target = input.current.throttle ? top : input.current.reverse ? -CAR.reverseSpeed : 0;
       const ds = target - speed.current;
       speed.current += Math.sign(ds) * Math.min(Math.abs(ds), accel * dt);
@@ -179,7 +186,7 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain }: CarP
       const steer = (input.current.left ? 1 : 0) - (input.current.right ? 1 : 0);
       const speedFactor = Math.min(1, Math.abs(speed.current) / CAR.steerSpeedRef);
       const dir = speed.current >= 0 ? 1 : -1;
-      b.setAngvel({ x: 0, y: steer * CAR.steerRate * speedFactor * dir, z: 0 }, true);
+      b.setAngvel({ x: 0, y: steer * handling.steerRate * speedFactor * dir, z: 0 }, true);
     }
 
     if (!crashed.current && t.z < TRACK.pileZ + 18) {
@@ -223,7 +230,7 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain }: CarP
       lastFx.current = now;
       fxBus.triggerImpact(t.x, t.y + 0.4, t.z, Math.min(1, mag / (IMPACT.carDamageForce * 1.4)));
     }
-    if (mag < IMPACT.carDamageForce || now < armedAt) return;
+    if (mag < handling.damageForce || now < armedAt) return;
 
     const res = applyDamage(damageRef.current, now, IMPACT.carDamageCooldownMs);
     if (!res.applied) return;
@@ -266,7 +273,7 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain }: CarP
       colliders={false}
       collisionGroups={CAR_GROUPS}
       position={[SPAWN.x, spawnY, SPAWN.z]}
-      density={CAR.density}
+      density={handling.density}
       linearDamping={CAR.linearDamping}
       angularDamping={CAR.angularDamping}
       onContactForce={onCarContact}

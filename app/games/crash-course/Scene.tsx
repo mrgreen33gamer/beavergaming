@@ -13,6 +13,7 @@ import { TRACK } from "./config";
 import type { PropKind } from "./scoring";
 import type { Phase, RunHud } from "./index";
 import type { MapDef } from "./content/maps";
+import type { CarDef } from "./content/cars";
 
 /** A right-triangular-prism ramp: the low front edge meets the ground on a
  *  line, rising to the back — a real wedge, not a floating tilted box. */
@@ -69,9 +70,10 @@ export interface SceneProps {
   runKey: number;
   armedAt: number;
   map: MapDef;
+  car: CarDef;
 }
 
-function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: SceneProps) {
+function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map, car }: SceneProps) {
   const props = useMemo(
     () => anchorToTerrain([...buildFinale(map.pileZ), ...buildTrackStructures()], map.terrain),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,7 +155,7 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: 
         <meshStandardMaterial color="#ffd24a" emissive="#ffd24a" emissiveIntensity={1.0} toneMapped={false} depthWrite={false} polygonOffset polygonOffsetFactor={-2} />
       </mesh>
 
-      <Car phase={phase} hud={hud} onEnterCrash={onEnterCrash} armedAt={armedAt} terrain={map.terrain} />
+      <Car phase={phase} hud={hud} onEnterCrash={onEnterCrash} armedAt={armedAt} terrain={map.terrain} car={car} />
       <DebrisManager />
 
       {props.map((item, i) => (
