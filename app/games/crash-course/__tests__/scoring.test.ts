@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   PROP_VALUES,
   COMBO_WINDOW_MS,
+  COMBO_MAX,
   initialScore,
   registerDestruction,
+  comboShake,
   initialNitrous,
   spendNitrous,
   nitrousActive,
@@ -35,8 +37,8 @@ describe("scoring — weighted destruction + combo", () => {
   it("resets the combo once the window lapses", () => {
     let s = initialScore();
     s = registerDestruction(s, "crate", 0); // x1
-    s = registerDestruction(s, "crate", 400); // x2
-    s = registerDestruction(s, "crate", 1200); // gap > 500ms -> x1
+    s = registerDestruction(s, "crate", 400); // x2 (inside 900ms)
+    s = registerDestruction(s, "crate", 1400); // gap 1000 > 900ms -> x1
     expect(s.multiplier).toBe(1);
     expect(s.bestMultiplier).toBe(2);
   });
@@ -45,6 +47,20 @@ describe("scoring — weighted destruction + combo", () => {
     let s = initialScore();
     s = registerDestruction(s, "crate", 0);
     s = registerDestruction(s, "crate", COMBO_WINDOW_MS);
+    expect(s.multiplier).toBe(2);
+  });
+
+  it("caps the multiplier at COMBO_MAX no matter how long the chain", () => {
+    let s = initialScore();
+    for (let i = 0; i < COMBO_MAX + 5; i++) s = registerDestruction(s, "crate", i * 100);
+    expect(s.multiplier).toBe(COMBO_MAX);
+    expect(s.bestMultiplier).toBe(COMBO_MAX);
+  });
+
+  it("chains within the wider 900ms window", () => {
+    let s = initialScore();
+    s = registerDestruction(s, "crate", 0);
+    s = registerDestruction(s, "crate", 850); // was a reset under 500ms, now chains
     expect(s.multiplier).toBe(2);
   });
 
@@ -125,5 +141,16 @@ describe("car damage", () => {
     expect(squashScale(0)).toBe(1);
     expect(squashScale(1)).toBeCloseTo(0.88);
     expect(squashScale(100)).toBeGreaterThanOrEqual(0.45);
+  });
+});
+
+describe("comboShake", () => {
+  it("starts modest at x1 and escalates with the multiplier", () => {
+    expect(comboShake(1)).toBeCloseTo(0.25);
+    expect(comboShake(5)).toBeGreaterThan(comboShake(1));
+  });
+  it("never exceeds 1", () => {
+    expect(comboShake(COMBO_MAX)).toBeLessThanOrEqual(1);
+    expect(comboShake(999)).toBe(1);
   });
 });

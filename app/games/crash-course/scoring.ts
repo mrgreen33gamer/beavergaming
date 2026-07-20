@@ -22,7 +22,11 @@ export const PROP_VALUES: Record<PropKind, number> = {
 // --- Combo scoring --------------------------------------------------------
 
 /** Destructions chained within this window escalate the multiplier. */
-export const COMBO_WINDOW_MS = 500;
+export const COMBO_WINDOW_MS = 900;
+
+/** Hard ceiling on the combo multiplier — keeps a dense pile from spiking it
+ *  to nonsense while still letting it climb well past x10. */
+export const COMBO_MAX = 15;
 
 export interface ScoreState {
   total: number;
@@ -51,7 +55,7 @@ export function registerDestruction(
 ): ScoreState {
   const chained =
     state.lastHitMs !== null && timeMs - state.lastHitMs <= windowMs;
-  const multiplier = chained ? state.multiplier + 1 : 1;
+  const multiplier = chained ? Math.min(COMBO_MAX, state.multiplier + 1) : 1;
   const gained = PROP_VALUES[kind] * multiplier;
   return {
     total: state.total + gained,
@@ -60,6 +64,14 @@ export function registerDestruction(
     bestMultiplier: Math.max(state.bestMultiplier, multiplier),
     lastHitMs: timeMs,
   };
+}
+
+/**
+ * Screen-shake amount in [0..1] for a given combo multiplier. Modest at x1 and
+ * climbs with the combo so a big chain rattles the camera harder. Pure.
+ */
+export function comboShake(multiplier: number): number {
+  return Math.min(1, 0.25 + (multiplier - 1) * 0.06);
 }
 
 // --- Nitrous accounting ---------------------------------------------------
