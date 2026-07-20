@@ -51,3 +51,16 @@ export const DEFAULT_MAP_ID = "downtown";
 export function getMap(id: string): MapDef {
   return MAPS.find((m) => m.id === id) ?? MAPS.find((m) => m.id === DEFAULT_MAP_ID)!;
 }
+
+export interface MapChoice {
+  id: string;
+  name: string;
+}
+
+/**
+ * Lightweight list for the map-select UI — id + display name only, in registry
+ * order. Pure so the selector's contents are unit-testable without React.
+ */
+export function mapChoices(): MapChoice[] {
+  return MAPS.map((m) => ({ id: m.id, name: m.name }));
+}

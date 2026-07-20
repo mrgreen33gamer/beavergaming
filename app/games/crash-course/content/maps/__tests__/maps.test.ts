@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_MAP_ID, getMap, MAPS } from "../index";
+import { DEFAULT_MAP_ID, getMap, MAPS, mapChoices } from "../index";
 
 describe("map registry", () => {
   it("has the downtown default", () => {
@@ -82,5 +82,20 @@ describe("map registry", () => {
     expect(canyon.trackWidth).toBeLessThan(highway.trackWidth);
     expect(canyon.terrain.amplitude).toBeGreaterThan(highway.terrain.amplitude);
     expect(highway.trackWidth).toBeGreaterThanOrEqual(getMap("downtown").trackWidth);
+  });
+});
+
+describe("mapChoices", () => {
+  it("lists every map's id + name in registry order", () => {
+    expect(mapChoices()).toEqual([
+      { id: "downtown", name: "Downtown Demo" },
+      { id: "hills", name: "Rolling Hills" },
+      { id: "highway", name: "Sunset Highway" },
+      { id: "canyon", name: "Red Canyon" },
+    ]);
+  });
+
+  it("returns one choice per registered map", () => {
+    expect(mapChoices()).toHaveLength(MAPS.length);
   });
 });

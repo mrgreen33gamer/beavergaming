@@ -16,7 +16,7 @@ import { fxBus } from "./fxBus";
 import { QualityProvider } from "./engine/QualityContext";
 import { Viewport } from "./engine/Viewport";
 import { useSettle } from "./engine/useSettle";
-import { getMap, DEFAULT_MAP_ID } from "./content/maps";
+import { getMap, DEFAULT_MAP_ID, mapChoices } from "./content/maps";
 
 export type Phase = "intro" | "ready" | "driving" | "crashing" | "results";
 
@@ -41,7 +41,8 @@ export default function CrashCourse() {
   phaseRef.current = phase;
   const [count, setCount] = useState(3);
   const [runKey, setRunKey] = useState(0);
-  const map = getMap(DEFAULT_MAP_ID);
+  const [selectedMapId, setSelectedMapId] = useState<string>(DEFAULT_MAP_ID);
+  const map = getMap(selectedMapId);
   const speedRef = useRef(0);
   /** performance.now() when driving began — props arm ARM_GRACE_MS later. */
   const [driveStartMs, setDriveStartMs] = useState<number | null>(null);
@@ -218,6 +219,21 @@ export default function CrashCourse() {
               Drive the track, bank your 3 nitro charges, and plow into the pile at the end.
               Chain your smashes for a combo multiplier. Wreck everything.
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+              {mapChoices().map((choice) => (
+                <button
+                  key={choice.id}
+                  onClick={() => setSelectedMapId(choice.id)}
+                  className={`pixel-edge px-3 py-1 rounded font-[family-name:var(--font-mono)] text-xs ${
+                    choice.id === selectedMapId
+                      ? "bg-[var(--accent)] text-[var(--background)]"
+                      : "bg-transparent border border-[var(--border)] text-[var(--muted)]"
+                  }`}
+                >
+                  {choice.name}
+                </button>
+              ))}
+            </div>
             <button
               onClick={start}
               className="pixel-edge px-6 py-2 rounded bg-[var(--crt-green)] text-[var(--background)] font-[family-name:var(--font-display)] text-sm"
