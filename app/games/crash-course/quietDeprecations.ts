@@ -42,7 +42,11 @@ export function quietThirdPartyDeprecations(): void {
   if (installed || typeof window === "undefined") return;
   installed = true;
 
-  for (const method of ["warn", "log"] as const) {
+  // Cover warn/log/error: `three` emits the Clock notice via console.warn, but
+  // the Rapier WASM init notice's channel isn't guaranteed — the exact-substring
+  // match keeps this safe (a genuine error never contains these phrases), so all
+  // other console.error output still passes straight through.
+  for (const method of ["warn", "log", "error"] as const) {
     const original = console[method].bind(console);
     console[method] = (...args: unknown[]) => {
       if (isSilenced(args)) return;
