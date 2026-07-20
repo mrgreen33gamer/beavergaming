@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { heightAt, normalAt, buildHeightfield, type TerrainParams } from "../terrain";
+import { heightAt, normalAt, buildHeightfield, type TerrainParams } from "../terrainSampler";
 
 const FLAT: TerrainParams = { seed: 1, amplitude: 0, frequency: 0.05 };
 const HILLS: TerrainParams = { seed: 7, amplitude: 4, frequency: 0.08 };

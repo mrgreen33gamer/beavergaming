@@ -6,7 +6,7 @@ import { RigidBody } from "@react-three/rapier";
 import Car from "./Car";
 import Destructible from "./Destructible";
 import DebrisManager from "./DebrisManager";
-import { Terrain } from "./engine/Terrain.tsx";
+import { Terrain } from "./engine/Terrain";
 import { buildFinale, buildTrackStructures } from "./structures";
 import { TRACK } from "./config";
 import type { PropKind } from "./scoring";

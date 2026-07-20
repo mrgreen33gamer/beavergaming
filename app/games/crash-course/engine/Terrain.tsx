@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { RigidBody, HeightfieldCollider } from "@react-three/rapier";
 import { useQuality } from "./QualityContext";
-import { buildHeightfield, heightAt, type TerrainParams } from "./terrain";
+import { buildHeightfield, heightAt, type TerrainParams } from "./terrainSampler";
 
 /**
  * Drivable terrain: a displaced ground mesh plus a matching physical Rapier

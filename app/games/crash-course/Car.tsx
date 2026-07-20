@@ -19,7 +19,7 @@ import { VehicleModel, type VehicleApi } from "./Vehicle";
 import { CAR_MODEL, MODEL_YAW } from "./models";
 import { initialNitrous, spendNitrous, nitrousActive, initialDamage, applyDamage } from "./scoring";
 import { isBelowKillPlane } from "./engine/physicsSafety";
-import { heightAt, normalAt, type TerrainParams } from "./engine/terrain";
+import { heightAt, normalAt, type TerrainParams } from "./engine/terrainSampler";
 import type { Phase, RunHud } from "./index";
 
 const _q = new THREE.Quaternion();
