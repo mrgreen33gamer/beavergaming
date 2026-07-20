@@ -96,13 +96,13 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: 
 
   return (
     <>
-      <ambientLight intensity={0.55} />
-      <hemisphereLight args={["#bcd8ff", "#3a2e22", 0.8]} />
+      <ambientLight intensity={map.theme.ambientIntensity} />
+      <hemisphereLight args={[map.theme.hemiSky, map.theme.hemiGround, map.theme.hemiIntensity]} />
       <directionalLight
         castShadow
-        color="#fff2e0"
+        color={map.theme.sunColor}
         position={[26, 36, 20]}
-        intensity={1.8}
+        intensity={map.theme.sunIntensity}
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
         shadow-camera-left={-55}
@@ -115,7 +115,7 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: 
       <directionalLight color="#7aa0ff" position={[-20, 16, -12]} intensity={0.5} />
       <pointLight position={[0, 10, map.pileZ + 4]} intensity={45} distance={70} decay={2} color="#ffb060" />
 
-      <Terrain params={map.terrain} width={200} length={200} />
+      <Terrain params={map.terrain} width={200} length={200} color={map.theme.groundColor} />
 
       {laneMarks.map((z) => (
         <mesh key={z} position={[0, 0.12, z]} rotation={[-Math.PI / 2, 0, 0]}>
