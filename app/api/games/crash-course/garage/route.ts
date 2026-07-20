@@ -13,8 +13,8 @@ import type { SaveApi } from "@/lib/platform/save";
 const GAME_ID = "crash-course";
 const STATE_KEY = "garage";
 
-async function loadGarage(save: SaveApi): Promise<GarageState> {
-  const raw = await save.getState<GarageState>(GAME_ID, STATE_KEY);
+async function loadGarage(save: SaveApi, stateKey: string): Promise<GarageState> {
+  const raw = await save.getState<GarageState>(GAME_ID, stateKey);
   return normalizeGarage(raw ?? initialGarage());
 }
 
@@ -23,13 +23,19 @@ function fail(err: unknown) {
   if (message.includes("not implemented")) {
     return NextResponse.json({ error: "mongo_not_ready" }, { status: 503 });
   }
-  return NextResponse.json({ error: message }, { status: 500 });
+  // Do not leak internal/Mongo error detail to the client.
+  console.error("crash-course garage route error:", err);
+  return NextResponse.json({ error: "garage error" }, { status: 500 });
 }
 
 export async function GET() {
   try {
-    const { economy, save } = await getServerEconomy();
-    const [garage, balance] = await Promise.all([loadGarage(save), economy.getBalance()]);
+    const { economy, save, playerId } = await getServerEconomy();
+    const stateKey = `${playerId}:${STATE_KEY}`;
+    const [garage, balance] = await Promise.all([
+      loadGarage(save, stateKey),
+      economy.getBalance(),
+    ]);
     return NextResponse.json({ ...garage, balance });
   } catch (err) {
     return fail(err);
@@ -50,8 +56,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { economy, save } = await getServerEconomy();
-    let garage = await loadGarage(save);
+    const { economy, save, playerId } = await getServerEconomy();
+    // Namespace the persisted garage by player so ownership never leaks
+    // across accounts/guests — SaveApi's own key has no player scoping.
+    const stateKey = `${playerId}:${STATE_KEY}`;
+    let garage = await loadGarage(save, stateKey);
 
     if (action === "select") {
       if (!garage.owned.includes(carId)) {
@@ -60,7 +69,7 @@ export async function POST(req: Request) {
         );
       }
       garage = selectCar(garage, carId);
-      await save.setState(GAME_ID, STATE_KEY, garage);
+      await save.setState(GAME_ID, stateKey, garage);
       return NextResponse.json({ ok: true, ...garage, balance: await economy.getBalance() });
     }
 
@@ -76,7 +85,7 @@ export async function POST(req: Request) {
     // Already owned (or the free starter): idempotent no-op, never charged twice.
     if (garage.owned.includes(carId) || car.price <= 0) {
       garage = addOwned(garage, carId);
-      await save.setState(GAME_ID, STATE_KEY, garage);
+      await save.setState(GAME_ID, stateKey, garage);
       return NextResponse.json({ ok: true, ...garage, balance: await economy.getBalance() });
     }
 
@@ -87,7 +96,7 @@ export async function POST(req: Request) {
       );
     }
     garage = addOwned(garage, carId);
-    await save.setState(GAME_ID, STATE_KEY, garage);
+    await save.setState(GAME_ID, stateKey, garage);
     return NextResponse.json({ ok: true, ...garage, balance: await economy.getBalance() });
   } catch (err) {
     return fail(err);
