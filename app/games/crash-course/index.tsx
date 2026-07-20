@@ -14,6 +14,11 @@ import {
 import Scene from "./Scene";
 import Effects from "./Effects";
 import { fxBus } from "./fxBus";
+import { quietThirdPartyDeprecations } from "./quietDeprecations";
+
+// Drop known-benign third-party (three/Rapier) deprecation console noise as soon
+// as the game chunk loads — before the Canvas/Physics initialise and emit them.
+quietThirdPartyDeprecations();
 
 export type Phase = "intro" | "ready" | "driving" | "crashing" | "results";
 
