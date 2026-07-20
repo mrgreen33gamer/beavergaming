@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { RoundedBox } from "@react-three/drei";
-import { RigidBody, CuboidCollider, type RapierRigidBody } from "@react-three/rapier";
-import { CAR, NITROUS, IMPACT, TRACK } from "./config";
+import {
+  RigidBody,
+  CuboidCollider,
+  interactionGroups,
+  type RapierRigidBody,
+} from "@react-three/rapier";
+import { CAR, NITROUS, IMPACT, TRACK, CAR_FX_COOLDOWN_MS, DEBRIS } from "./config";
 import { fxBus } from "./fxBus";
 import { ModelOrShape } from "./Model";
 import { CAR_MODEL, DEBRIS_MODELS, MODEL_YAW } from "./models";
@@ -20,7 +25,6 @@ import {
 } from "./scoring";
 import type { Phase, RunHud } from "./index";
 
-// Reused scratch objects so the frame loop allocates nothing.
 const _q = new THREE.Quaternion();
 const _fwd = new THREE.Vector3();
 const _v = new THREE.Vector3();
@@ -28,6 +32,13 @@ const _v2 = new THREE.Vector3();
 const _cam = new THREE.Vector3();
 
 const SPAWN = { x: CAR.spawn[0], y: CAR.spawn[1], z: CAR.spawn[2] };
+
+// Collision groups so shed debris never collides with (rests on) the player
+// car. Only the car and debris need explicit groups; everything else stays
+// default and the exclusion still holds (collision needs both directions).
+const G_WORLD = 0, G_CAR = 1, G_DEBRIS = 2;
+const CAR_GROUPS = interactionGroups(G_CAR, [G_WORLD]);
+const DEBRIS_GROUPS = interactionGroups(G_DEBRIS, [G_WORLD]);
 
 /** Which Kenney debris part flies off for each shed panel. */
 const PANEL_DEBRIS: Record<DamagePanel, string> = {
@@ -45,9 +56,7 @@ interface DebrisPiece {
 
 export interface CarProps {
   phase: Phase;
-  /** Written every frame for the HUD to sample; never triggers React renders. */
   hud: RunHud;
-  /** Called once when the car reaches / enters the destruction zone. */
   onEnterCrash: () => void;
 }
 
@@ -57,14 +66,19 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
   phaseRef.current = phase;
 
   const input = useRef({ throttle: false, reverse: false, left: false, right: false });
-  const speed = useRef(0); // signed scalar cruise speed, arcade-eased
+  const speed = useRef(0);
   const nitrous = useRef(initialNitrous(NITROUS.charges));
   const crashed = useRef(false);
+  const lastFx = useRef(0);
 
   const damageRef = useRef(initialDamage());
   const [dmg, setDmg] = useState(initialDamage());
   const [debris, setDebris] = useState<DebrisPiece[]>([]);
   const debrisId = useRef(0);
+
+  const expireDebris = useCallback((id: number) => {
+    setDebris((d) => d.filter((x) => x.id !== id));
+  }, []);
 
   useEffect(() => {
     body.current?.setEnabledRotations(false, true, false, true);
@@ -173,31 +187,56 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
   const onContactForce = (mag: number) => {
     const b = body.current;
     if (!b) return;
-    if (mag > IMPACT.destroyForce) {
+    const now = performance.now();
+    // Sparks for a real hit — but rate-limited, so a prop grinding on the roof
+    // cannot spawn particles every frame.
+    if (mag > IMPACT.destroyForce && now - lastFx.current > CAR_FX_COOLDOWN_MS) {
+      lastFx.current = now;
       const t = b.translation();
       fxBus.triggerImpact(t.x, t.y + 0.4, t.z, Math.min(1, mag / (IMPACT.carDamageForce * 1.4)));
     }
     if (mag < IMPACT.carDamageForce) return;
-    const res = applyDamage(damageRef.current, performance.now(), IMPACT.carDamageCooldownMs);
+    const res = applyDamage(damageRef.current, now, IMPACT.carDamageCooldownMs);
     if (!res.applied) return;
     damageRef.current = res.state;
     setDmg(res.state);
-    if (res.detached) {
-      const t = b.translation();
-      const r = b.rotation();
-      _q.set(r.x, r.y, r.z, r.w);
-      _v.set(0, 0.5, 0).applyQuaternion(_q).add(_v2.set(t.x, t.y, t.z));
-      const lv = b.linvel();
-      const id = debrisId.current++;
-      const model = PANEL_DEBRIS[res.detached];
-      setDebris((d) => [
-        ...d,
-        { id, model, pos: [_v.x, _v.y, _v.z], vel: [lv.x, lv.y + 3, lv.z] },
-      ]);
-    }
+
+    // Throw off parts: the mapped panel plus a random extra for drama.
+    const t = b.translation();
+    const r = b.rotation();
+    _q.set(r.x, r.y, r.z, r.w);
+    _v.set(0, 0.5, 0).applyQuaternion(_q).add(_v2.set(t.x, t.y, t.z));
+    const lv = b.linvel();
+    const models = [
+      res.detached ? PANEL_DEBRIS[res.detached] : DEBRIS_MODELS[3],
+      DEBRIS_MODELS[Math.floor(Math.random() * DEBRIS_MODELS.length)],
+    ];
+    const fresh: DebrisPiece[] = models.map((model) => ({
+      id: debrisId.current++,
+      model,
+      pos: [_v.x, _v.y, _v.z],
+      vel: [
+        lv.x + (Math.random() - 0.5) * 7,
+        lv.y + 4 + Math.random() * 3,
+        lv.z + (Math.random() - 0.5) * 7,
+      ],
+    }));
+    setDebris((d) => {
+      const next = [...d, ...fresh];
+      return next.length > DEBRIS.maxAlive ? next.slice(next.length - DEBRIS.maxAlive) : next;
+    });
   };
 
-  const squash = squashScale(dmg.hits);
+  // Progressive crumple: non-uniform squash + a lean, so the car visibly
+  // deforms as metal rather than just shrinking.
+  const h = dmg.hits;
+  const dent: [number, number, number] = [
+    Math.max(0.6, 1 - h * 0.05),
+    squashScale(h),
+    Math.max(0.7, 1 - h * 0.03),
+  ];
+  const tiltZ = Math.min(0.28, h * 0.035);
+  const tiltX = Math.min(0.16, h * 0.018);
 
   return (
     <>
@@ -205,14 +244,15 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
         ref={body}
         type="dynamic"
         colliders={false}
+        collisionGroups={CAR_GROUPS}
         position={[SPAWN.x, SPAWN.y, SPAWN.z]}
         density={CAR.density}
         linearDamping={CAR.linearDamping}
         angularDamping={CAR.angularDamping}
         onContactForce={(p) => onContactForce(p.totalForceMagnitude)}
       >
-        <CuboidCollider args={[0.9, 0.35, 1.8]} />
-        <group scale={[1, squash, 1]}>
+        <CuboidCollider args={[0.9, 0.35, 1.8]} collisionGroups={CAR_GROUPS} />
+        <group scale={dent} rotation={[tiltX, 0, tiltZ]}>
           <ModelOrShape
             url={CAR_MODEL}
             fit={3.6}
@@ -224,13 +264,12 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
       </RigidBody>
 
       {debris.map((d) => (
-        <Debris key={d.id} piece={d} />
+        <Debris key={d.id} piece={d} onExpire={expireDebris} />
       ))}
     </>
   );
 }
 
-/** Fallback car (procedural) shown while the model loads or if it fails. */
 function ProceduralCar() {
   return (
     <group>
@@ -255,21 +294,23 @@ function ProceduralCar() {
   );
 }
 
-/** A shed car part, tumbling as its own rigid body. */
-function Debris({ piece }: { piece: DebrisPiece }) {
+function Debris({ piece, onExpire }: { piece: DebrisPiece; onExpire: (id: number) => void }) {
   const ref = useRef<RapierRigidBody>(null);
   useEffect(() => {
     const b = ref.current;
-    if (!b) return;
-    b.setLinvel({ x: piece.vel[0], y: piece.vel[1], z: piece.vel[2] }, true);
-    b.setAngvel(
-      { x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 8 },
-      true,
-    );
-  }, [piece.vel]);
+    if (b) {
+      b.setLinvel({ x: piece.vel[0], y: piece.vel[1], z: piece.vel[2] }, true);
+      b.setAngvel(
+        { x: (Math.random() - 0.5) * 9, y: (Math.random() - 0.5) * 9, z: (Math.random() - 0.5) * 9 },
+        true,
+      );
+    }
+    const to = setTimeout(() => onExpire(piece.id), DEBRIS.lifetimeMs);
+    return () => clearTimeout(to);
+  }, [piece, onExpire]);
   return (
-    <RigidBody ref={ref} position={piece.pos} colliders={false} density={0.5}>
-      <CuboidCollider args={[0.35, 0.2, 0.35]} />
+    <RigidBody ref={ref} position={piece.pos} colliders={false} collisionGroups={DEBRIS_GROUPS} density={0.5}>
+      <CuboidCollider args={[0.35, 0.2, 0.35]} collisionGroups={DEBRIS_GROUPS} />
       <ModelOrShape
         url={piece.model}
         fit={0.9}

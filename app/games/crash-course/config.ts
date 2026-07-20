@@ -43,14 +43,29 @@ export const TRACK = {
 
 // --- Impact detection -----------------------------------------------------
 export const IMPACT = {
-  /** Contact-force magnitude that counts a destructible as destroyed. */
-  destroyForce: 900,
-  /** Contact-force on the car that knocks a panel off + squashes the body. */
-  carDamageForce: 1600,
+  /** Contact-force magnitude that counts a destructible as destroyed. Lower =
+   *  easier to knock things over. */
+  destroyForce: 480,
+  /** Contact-force on the car that dents/crumples the body + sheds a part. */
+  carDamageForce: 1150,
   /** Min ms between successive car-damage events (rate limit). */
-  carDamageCooldownMs: 250,
+  carDamageCooldownMs: 220,
   /** Extra impulse added to a destroyed body for drama. */
-  scatterImpulse: 6,
+  scatterImpulse: 9,
+};
+
+/** Props ignore impacts for this long after a run starts, so the settling
+ *  pile never counts as "smashed". */
+export const ARM_GRACE_MS = 1200;
+
+/** Min ms between spark bursts on the player car — stops a prop resting on the
+ *  roof from spawning particles every single frame. */
+export const CAR_FX_COOLDOWN_MS = 90;
+
+/** Shed-debris housekeeping so parts never accumulate or rest on the car. */
+export const DEBRIS = {
+  maxAlive: 16,
+  lifetimeMs: 5000,
 };
 
 // --- Run settle -----------------------------------------------------------

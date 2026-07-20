@@ -21,11 +21,11 @@ const SIZE: Record<PropKind, [number, number, number]> = {
 };
 
 const DENSITY: Record<PropKind, number> = {
-  crate: 0.6,
-  box: 0.7,
-  barrel: 0.8,
-  gold: 0.9,
-  car: 1.4,
+  crate: 0.4,
+  box: 0.5,
+  barrel: 0.6,
+  gold: 0.7,
+  car: 1.2,
 };
 
 export interface DestructibleProps {
@@ -33,7 +33,9 @@ export interface DestructibleProps {
   position: [number, number, number];
   onDestroyed: (kind: PropKind) => void;
   drift?: [number, number];
-  active: boolean;
+  /** performance.now() timestamp after which impacts count (props ignore the
+   *  settling pile before this). */
+  armedAt: number;
 }
 
 /**
@@ -46,7 +48,7 @@ export default function Destructible({
   position,
   onDestroyed,
   drift,
-  active,
+  armedAt,
 }: DestructibleProps) {
   const body = useRef<RapierRigidBody>(null);
   const destroyed = useRef(false);
@@ -89,7 +91,7 @@ export default function Destructible({
       position={position}
       density={DENSITY[kind]}
       onContactForce={(payload) => {
-        if (!active || destroyed.current) return;
+        if (destroyed.current || performance.now() < armedAt) return;
         if (payload.totalForceMagnitude < IMPACT.destroyForce) return;
         destroyed.current = true;
         flash.current = 1.8;
