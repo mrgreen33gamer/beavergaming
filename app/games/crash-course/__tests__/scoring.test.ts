@@ -13,6 +13,8 @@ import {
   applyDamage,
   squashScale,
   DAMAGE_PANELS,
+  PANEL_DEFORM_BUDGET,
+  accrueDeform,
 } from "../scoring";
 
 describe("scoring — weighted destruction + combo", () => {
@@ -152,5 +154,31 @@ describe("comboShake", () => {
   it("never exceeds 1", () => {
     expect(comboShake(COMBO_MAX)).toBeLessThanOrEqual(1);
     expect(comboShake(999)).toBe(1);
+  });
+});
+
+describe("accrueDeform — plastic deformation budget", () => {
+  it("applies the full amount when there is room", () => {
+    const r = accrueDeform(0, 0.5, PANEL_DEFORM_BUDGET);
+    expect(r.applied).toBeCloseTo(0.5);
+    expect(r.used).toBeCloseTo(0.5);
+  });
+
+  it("clamps so used never exceeds the budget", () => {
+    const r = accrueDeform(PANEL_DEFORM_BUDGET - 0.1, 0.5, PANEL_DEFORM_BUDGET);
+    expect(r.used).toBeCloseTo(PANEL_DEFORM_BUDGET);
+    expect(r.applied).toBeCloseTo(0.1);
+  });
+
+  it("applies nothing once the budget is spent", () => {
+    const r = accrueDeform(PANEL_DEFORM_BUDGET, 0.5, PANEL_DEFORM_BUDGET);
+    expect(r.applied).toBe(0);
+    expect(r.used).toBe(PANEL_DEFORM_BUDGET);
+  });
+
+  it("ignores negative amounts", () => {
+    const r = accrueDeform(1, -0.3, PANEL_DEFORM_BUDGET);
+    expect(r.applied).toBe(0);
+    expect(r.used).toBe(1);
   });
 });

@@ -159,3 +159,30 @@ export function applyDamage(
 export function squashScale(hits: number): number {
   return Math.max(0.45, 1 - hits * 0.12);
 }
+
+// --- Metal crumple budget --------------------------------------------------
+
+/**
+ * How much cumulative plastic deformation (in world metres of vertex push) a
+ * car body may accrue over one run before it stops caving further. Bounds the
+ * wreck so the body crumples progressively but never turns inside-out.
+ */
+export const PANEL_DEFORM_BUDGET = 2.4;
+
+export interface DeformResult {
+  /** New cumulative deformation total. */
+  used: number;
+  /** How much of `amount` was actually allowed this hit (0 when spent). */
+  applied: number;
+}
+
+/**
+ * Accrue deformation toward the budget. Returns the new total and the amount
+ * actually allowed this hit, clamped so `used` never exceeds `max` and a
+ * negative `amount` is a no-op. Pure.
+ */
+export function accrueDeform(used: number, amount: number, max: number): DeformResult {
+  const room = Math.max(0, max - used);
+  const applied = Math.max(0, Math.min(amount, room));
+  return { used: used + applied, applied };
+}
