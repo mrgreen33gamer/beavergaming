@@ -9,14 +9,19 @@ export interface PropDef {
   kind: PropKind;
   /** Point value — mirrors scoring.PROP_VALUES, never diverges. */
   value: number;
-  /** Box footprint [w, h, d]; matches the meshes in Destructible. */
+  /** Box footprint [w, h, d]. PROVISIONAL — not yet reconciled with the live
+   *  meshes in Destructible.tsx; see the SIZE note below before wiring in. */
   size: [number, number, number];
   color: string;
   /** Rapier-ish relative mass; drives how far a hit throws it. */
   mass: number;
 }
 
-// Footprints match structures.ts H and the Destructible meshes.
+// PROVISIONAL footprints. These do NOT yet match Destructible.tsx's live SIZE
+// table (e.g. barrel is [1.35,1.9,1.35] and car is [4.2,1.6,2.0] there) — the
+// catalog is not consumed by rendering in Phase 1. Reconcile these with the
+// real meshes (or update the meshes) before wiring propDef() into the scene in
+// Phase 5, or the collider/mesh shape will change.
 const SIZE: Record<PropKind, [number, number, number]> = {
   crate: [1.6, 1.6, 1.6],
   box: [1.9, 1.9, 1.9],

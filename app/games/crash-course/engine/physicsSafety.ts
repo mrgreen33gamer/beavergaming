@@ -20,6 +20,9 @@ export function sanitizeVec(v: Vec3, fallback: Vec3): Vec3 {
   return isFiniteVec(v) ? v : { ...fallback };
 }
 
+/** Clamp a velocity to `maxSpeed`, preserving direction. NOTE: call
+ *  `sanitizeVec` first — a NaN component makes `mag` NaN, which fails both
+ *  guards below and returns a NaN-scaled vector unchanged. */
 export function clampSpeed(v: Vec3, maxSpeed: number = MAX_SPEED): Vec3 {
   const mag = Math.hypot(v.x, v.y, v.z);
   if (mag <= maxSpeed || mag === 0) return v;
