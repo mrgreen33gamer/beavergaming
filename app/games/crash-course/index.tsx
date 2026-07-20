@@ -17,7 +17,9 @@ import { QualityProvider } from "./engine/QualityContext";
 import { Viewport } from "./engine/Viewport";
 import { useSettle } from "./engine/useSettle";
 import { getMap, DEFAULT_MAP_ID, mapChoices } from "./content/maps";
-import { getCar, STARTER_CAR_ID } from "./content/cars";
+import { getCar } from "./content/cars";
+import { useGarage } from "./useGarage";
+import Garage from "./Garage";
 
 export type Phase = "intro" | "ready" | "driving" | "crashing" | "results";
 
@@ -36,6 +38,8 @@ export default function CrashCourse() {
   const { host, highScore } = useCartridge("crash-course");
   const hostRef = useRef(host);
   hostRef.current = host;
+  const garage = useGarage();
+  const activeCar = getCar(garage.selected);
 
   const [phase, setPhase] = useState<Phase>("intro");
   const phaseRef = useRef(phase);
@@ -187,7 +191,7 @@ export default function CrashCourse() {
                 runKey={runKey}
                 armedAt={driveStartMs === null ? Infinity : driveStartMs + ARM_GRACE_MS}
                 map={map}
-                car={getCar(STARTER_CAR_ID)}
+                car={activeCar}
               />
             </Physics>
             <Effects />
@@ -235,6 +239,9 @@ export default function CrashCourse() {
                   {choice.name}
                 </button>
               ))}
+            </div>
+            <div className="mb-3 flex justify-center">
+              <Garage state={garage} />
             </div>
             <button
               onClick={start}
