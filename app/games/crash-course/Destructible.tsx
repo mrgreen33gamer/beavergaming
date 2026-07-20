@@ -7,8 +7,9 @@ import { RoundedBox } from "@react-three/drei";
 import { RigidBody, CuboidCollider, type RapierRigidBody } from "@react-three/rapier";
 import { PROP_COLOR, IMPACT } from "./config";
 import { fxBus } from "./fxBus";
+import { debrisBus } from "./debrisBus";
 import { ModelOrShape } from "./Model";
-import { CRATE_MODEL, junkCarFor, MODEL_YAW } from "./models";
+import { CRATE_MODEL, DEBRIS_MODELS, junkCarFor, MODEL_YAW } from "./models";
 import type { PropKind } from "./scoring";
 
 /** Box dimensions per kind (metres). Cars are much bigger and heavier. */
@@ -92,7 +93,9 @@ export default function Destructible({
       colliders={false}
       position={position}
       density={DENSITY[kind]}
-      restitution={0.15}
+      restitution={0.05}
+      linearDamping={0.4}
+      angularDamping={0.6}
       userData={{ smashable: true }}
       onContactForce={(payload) => {
         if (destroyed.current || performance.now() < armedAt) return;
@@ -117,6 +120,17 @@ export default function Destructible({
           },
           true,
         );
+        // Smashed cars shed a couple of real parts.
+        if (kind === "car" && t) {
+          const lv = body.current?.linvel();
+          for (const model of [DEBRIS_MODELS[2], DEBRIS_MODELS[0]]) {
+            debrisBus.emit(model, [t.x, t.y + 0.6, t.z], [
+              (lv?.x ?? 0) + (Math.random() - 0.5) * 6,
+              3 + Math.random() * 3,
+              (lv?.z ?? 0) + (Math.random() - 0.5) * 6,
+            ]);
+          }
+        }
       }}
     >
       <CuboidCollider args={half} />

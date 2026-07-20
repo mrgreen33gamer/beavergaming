@@ -47,8 +47,9 @@ export const IMPACT = {
    *  easier to knock things over (styrofoam props barely resist). */
   destroyForce: 280,
   /** Contact-force on the car that dents/crumples the body + sheds a part.
-   *  High enough that only the heavier cars dent you, not foam crates. */
-  carDamageForce: 700,
+   *  High: the car is tough, so it takes a real car-to-car slam to damage it,
+   *  never a foam crate or a scrape. */
+  carDamageForce: 1100,
   /** Min ms between successive car-damage events (rate limit). */
   carDamageCooldownMs: 220,
   /** Extra impulse added to a destroyed body for drama. */

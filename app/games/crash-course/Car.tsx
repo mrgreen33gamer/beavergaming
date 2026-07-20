@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { RoundedBox } from "@react-three/drei";
@@ -11,18 +11,13 @@ import {
   type RapierRigidBody,
   type ContactForcePayload,
 } from "@react-three/rapier";
-import { CAR, NITROUS, IMPACT, TRACK, CAR_FX_COOLDOWN_MS, DEBRIS } from "./config";
+import { CAR, NITROUS, IMPACT, TRACK, CAR_FX_COOLDOWN_MS } from "./config";
 import { fxBus } from "./fxBus";
-import { ModelOrShape, ModelBoundary, DentableModel, type DentFn } from "./Model";
-import { CAR_MODEL, DEBRIS_MODELS, MODEL_YAW } from "./models";
-import {
-  initialNitrous,
-  spendNitrous,
-  nitrousActive,
-  initialDamage,
-  applyDamage,
-  type DamagePanel,
-} from "./scoring";
+import { debrisBus } from "./debrisBus";
+import { ModelBoundary } from "./Model";
+import { VehicleModel, type VehicleApi } from "./Vehicle";
+import { CAR_MODEL, MODEL_YAW } from "./models";
+import { initialNitrous, spendNitrous, nitrousActive, initialDamage, applyDamage } from "./scoring";
 import type { Phase, RunHud } from "./index";
 
 const _q = new THREE.Quaternion();
@@ -30,23 +25,8 @@ const _fwd = new THREE.Vector3();
 const _cam = new THREE.Vector3();
 
 const SPAWN = { x: CAR.spawn[0], y: CAR.spawn[1], z: CAR.spawn[2] };
-
-const G_WORLD = 0, G_CAR = 1, G_DEBRIS = 2;
-const CAR_GROUPS = interactionGroups(G_CAR, [G_WORLD]);
-const DEBRIS_GROUPS = interactionGroups(G_DEBRIS, [G_WORLD]);
-
-const PANEL_DEBRIS: Record<DamagePanel, string> = {
-  roof: DEBRIS_MODELS[1], // door
-  bumper: DEBRIS_MODELS[0], // bumper
-  wheel: DEBRIS_MODELS[2], // tire
-};
-
-interface DebrisPiece {
-  id: number;
-  model: string;
-  pos: [number, number, number];
-  vel: [number, number, number];
-}
+const CAR_GROUPS = interactionGroups(1, [0]);
+const WHEEL_RADIUS = 0.4;
 
 export interface CarProps {
   phase: Phase;
@@ -65,15 +45,8 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
   const nitrous = useRef(initialNitrous(NITROUS.charges));
   const crashed = useRef(false);
   const lastFx = useRef(0);
-  const dentApi = useRef<DentFn | null>(null);
-
+  const vehicle = useRef<VehicleApi | null>(null);
   const damageRef = useRef(initialDamage());
-  const [debris, setDebris] = useState<DebrisPiece[]>([]);
-  const debrisId = useRef(0);
-
-  const expireDebris = useCallback((id: number) => {
-    setDebris((d) => d.filter((x) => x.id !== id));
-  }, []);
 
   useEffect(() => {
     body.current?.setEnabledRotations(false, true, false, true);
@@ -165,6 +138,10 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
     hud.nitrousCharges = nitrous.current.charges;
     hud.nitrousActive = boost;
 
+    // Roll the wheels by the distance actually travelled along the car's facing.
+    const forwardSpeed = lv.x * _fwd.x + lv.z * _fwd.z;
+    vehicle.current?.spinWheels((forwardSpeed * dt) / WHEEL_RADIUS);
+
     _cam.set(t.x - _fwd.x * 12, t.y + 6, t.z - _fwd.z * 12);
     const k = 1 - Math.pow(0.0015, dt);
     state.camera.position.lerp(_cam, k);
@@ -181,8 +158,6 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
   const onCarContact = (p: ContactForcePayload) => {
     const b = body.current;
     if (!b) return;
-    // Only smashables (props / other cars) damage or spark the car — never
-    // ramps, walls, the ground, or the spawn drop.
     if (!p.other.rigidBodyObject?.userData?.smashable) return;
 
     const mag = p.totalForceMagnitude;
@@ -207,62 +182,47 @@ export default function Car({ phase, hud, onEnterCrash, armedAt }: CarProps) {
       const vx = o.x - t.x, vy = o.y - t.y, vz = o.z - t.z;
       const dist = Math.hypot(vx, vy, vz) || 1;
       const nx = vx / dist, ny = vy / dist, nz = vz / dist;
-      const reach = Math.min(dist, 2.0);
+      const reach = Math.min(dist, 2.2);
       px = t.x + nx * reach; py = t.y + ny * reach; pz = t.z + nz * reach;
       dx = -nx; dy = -Math.abs(ny) * 0.5 - 0.1; dz = -nz;
     }
-    const point = new THREE.Vector3(px, py, pz);
-    const dir = new THREE.Vector3(dx, dy, dz).normalize();
-    dentApi.current?.(point, dir, Math.min(0.55, 0.22 + mag / 9000));
+    vehicle.current?.dent(
+      new THREE.Vector3(px, py, pz),
+      new THREE.Vector3(dx, dy, dz).normalize(),
+      Math.min(0.7, 0.25 + mag / 8000),
+    );
 
-    // One part flies off from the impact point.
-    const model = res.detached
-      ? PANEL_DEBRIS[res.detached]
-      : DEBRIS_MODELS[Math.floor(Math.random() * DEBRIS_MODELS.length)];
-    const lv = b.linvel();
-    const id = debrisId.current++;
-    setDebris((d) => {
-      const next = [
-        ...d,
-        {
-          id, model,
-          pos: [px, py, pz] as [number, number, number],
-          vel: [
-            lv.x + (Math.random() - 0.5) * 6,
-            lv.y + 4 + Math.random() * 3,
-            lv.z + (Math.random() - 0.5) * 6,
-          ] as [number, number, number],
-        },
-      ];
-      return next.length > DEBRIS.maxAlive ? next.slice(next.length - DEBRIS.maxAlive) : next;
-    });
+    // Shed a real part (wheel/spoiler) from the car at the impact.
+    const part = vehicle.current?.detachNext();
+    if (part) {
+      const lv = b.linvel();
+      debrisBus.emit(part.model, part.pos, [
+        lv.x + (Math.random() - 0.5) * 6,
+        lv.y + 4 + Math.random() * 3,
+        lv.z + (Math.random() - 0.5) * 6,
+      ]);
+    }
   };
 
   return (
-    <>
-      <RigidBody
-        ref={body}
-        type="dynamic"
-        colliders={false}
-        collisionGroups={CAR_GROUPS}
-        position={[SPAWN.x, SPAWN.y, SPAWN.z]}
-        density={CAR.density}
-        linearDamping={CAR.linearDamping}
-        angularDamping={CAR.angularDamping}
-        onContactForce={onCarContact}
-      >
-        <CuboidCollider args={[1.1, 0.5, 2.3]} collisionGroups={CAR_GROUPS} />
-        <ModelBoundary fallback={<ProceduralCar />}>
-          <Suspense fallback={<ProceduralCar />}>
-            <DentableModel url={CAR_MODEL} fit={4.6} baseY={-0.5} yaw={MODEL_YAW.car} apiRef={dentApi} />
-          </Suspense>
-        </ModelBoundary>
-      </RigidBody>
-
-      {debris.map((d) => (
-        <Debris key={d.id} piece={d} onExpire={expireDebris} />
-      ))}
-    </>
+    <RigidBody
+      ref={body}
+      type="dynamic"
+      colliders={false}
+      collisionGroups={CAR_GROUPS}
+      position={[SPAWN.x, SPAWN.y, SPAWN.z]}
+      density={CAR.density}
+      linearDamping={CAR.linearDamping}
+      angularDamping={CAR.angularDamping}
+      onContactForce={onCarContact}
+    >
+      <CuboidCollider args={[1.1, 0.5, 2.3]} collisionGroups={CAR_GROUPS} />
+      <ModelBoundary fallback={<ProceduralCar />}>
+        <Suspense fallback={<ProceduralCar />}>
+          <VehicleModel url={CAR_MODEL} fit={4.6} baseY={-0.5} yaw={MODEL_YAW.car} apiRef={vehicle} />
+        </Suspense>
+      </ModelBoundary>
+    </RigidBody>
   );
 }
 
@@ -287,38 +247,5 @@ function ProceduralCar() {
         </mesh>
       ))}
     </group>
-  );
-}
-
-function Debris({ piece, onExpire }: { piece: DebrisPiece; onExpire: (id: number) => void }) {
-  const ref = useRef<RapierRigidBody>(null);
-  useEffect(() => {
-    const b = ref.current;
-    if (b) {
-      b.setLinvel({ x: piece.vel[0], y: piece.vel[1], z: piece.vel[2] }, true);
-      b.setAngvel(
-        { x: (Math.random() - 0.5) * 9, y: (Math.random() - 0.5) * 9, z: (Math.random() - 0.5) * 9 },
-        true,
-      );
-    }
-    const to = setTimeout(() => onExpire(piece.id), DEBRIS.lifetimeMs);
-    return () => clearTimeout(to);
-  }, [piece, onExpire]);
-  return (
-    <RigidBody ref={ref} position={piece.pos} colliders={false} collisionGroups={DEBRIS_GROUPS} density={0.5}>
-      <CuboidCollider args={[0.35, 0.2, 0.35]} collisionGroups={DEBRIS_GROUPS} />
-      <ModelOrShape
-        url={piece.model}
-        fit={0.9}
-        baseY={-0.2}
-        yaw={0}
-        fallback={
-          <mesh castShadow>
-            <boxGeometry args={[0.5, 0.3, 0.5]} />
-            <meshStandardMaterial color="#2a2f3a" metalness={0.3} roughness={0.5} />
-          </mesh>
-        }
-      />
-    </RigidBody>
   );
 }
