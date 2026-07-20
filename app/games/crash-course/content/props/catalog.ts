@@ -16,9 +16,9 @@ export interface PropDef {
   mass: number;
 }
 
-// Reconciled with the live meshes in Destructible.tsx (Phase 5). These sizes
-// are now the source the scene consumes — keep them in lockstep with
-// Destructible SIZE and structures.ts H.
+// Reconciled with the live meshes in Destructible.tsx (Phase 5). Kept in
+// lockstep with Destructible.tsx's own SIZE and structures.ts H — the scene
+// currently reads Destructible's own copy, not this catalog.
 const SIZE: Record<PropKind, [number, number, number]> = {
   crate: [1.6, 1.6, 1.6],
   box: [1.9, 1.9, 1.9],

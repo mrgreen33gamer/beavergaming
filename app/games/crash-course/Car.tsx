@@ -11,7 +11,7 @@ import {
   type RapierRigidBody,
   type ContactForcePayload,
 } from "@react-three/rapier";
-import { CAR, NITROUS, IMPACT, TRACK, CAR_FX_COOLDOWN_MS } from "./config";
+import { CAR, NITROUS, IMPACT, CAR_FX_COOLDOWN_MS } from "./config";
 import { carHandling } from "./content/cars/handling";
 import type { CarDef } from "./content/cars";
 import { fxBus } from "./fxBus";
@@ -43,7 +43,6 @@ const _back = new THREE.Vector3();
 const _tiltMat = new THREE.Matrix4();
 const _tq = new THREE.Quaternion();
 
-const SPAWN = { x: CAR.spawn[0], y: CAR.spawn[1], z: CAR.spawn[2] };
 const CAR_GROUPS = interactionGroups(1, [0]);
 const WHEEL_RADIUS = 0.4;
 
@@ -54,9 +53,11 @@ export interface CarProps {
   armedAt: number;
   terrain: TerrainParams;
   car: CarDef;
+  pileZ: number;
+  spawn: [number, number, number];
 }
 
-export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car }: CarProps) {
+export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car, pileZ, spawn }: CarProps) {
   const body = useRef<RapierRigidBody>(null);
   const modelGroup = useRef<THREE.Group>(null);
   const phaseRef = useRef(phase);
@@ -77,8 +78,8 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car }:
 
   // Terrain-aware ride height: the car spawns/resets on top of the ground at
   // its (x, z), not at a fixed world Y. On Downtown (amplitude 0) heightAt
-  // is always 0, so this equals CAR.spawn[1] exactly — behavior-preserving.
-  const spawnY = heightAt(terrain, SPAWN.x, SPAWN.z) + CAR.spawn[1];
+  // is always 0, so this equals spawn[1] exactly — behavior-preserving.
+  const spawnY = heightAt(terrain, spawn[0], spawn[2]) + spawn[1];
 
   useEffect(() => {
     body.current?.setEnabledRotations(false, true, false, true);
@@ -125,7 +126,7 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car }:
     const t = b.translation();
 
     if (!Number.isFinite(t.x) || !Number.isFinite(t.y) || !Number.isFinite(t.z)) {
-      b.setTranslation({ x: SPAWN.x, y: spawnY, z: SPAWN.z }, true);
+      b.setTranslation({ x: spawn[0], y: spawnY, z: spawn[2] }, true);
       b.setLinvel({ x: 0, y: 0, z: 0 }, true);
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
       speed.current = 0;
@@ -190,7 +191,7 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car }:
       b.setAngvel({ x: 0, y: steer * handling.steerRate * speedFactor * dir, z: 0 }, true);
     }
 
-    if (!crashed.current && t.z < TRACK.pileZ + 18) {
+    if (!crashed.current && t.z < pileZ + 18) {
       crashed.current = true;
       b.setEnabledRotations(true, true, true, true);
       onEnterCrash();
@@ -277,7 +278,7 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car }:
       type="dynamic"
       colliders={false}
       collisionGroups={CAR_GROUPS}
-      position={[SPAWN.x, spawnY, SPAWN.z]}
+      position={[spawn[0], spawnY, spawn[2]]}
       density={handling.density}
       linearDamping={CAR.linearDamping}
       angularDamping={CAR.angularDamping}
