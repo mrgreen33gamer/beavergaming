@@ -7,7 +7,8 @@ import Car from "./Car";
 import Destructible from "./Destructible";
 import DebrisManager from "./DebrisManager";
 import { Terrain } from "./engine/Terrain";
-import { buildFinale, buildTrackStructures } from "./structures";
+import { buildFinale, buildTrackStructures, anchorToTerrain } from "./structures";
+import { heightAt } from "./engine/terrainSampler";
 import { TRACK } from "./config";
 import type { PropKind } from "./scoring";
 import type { Phase, RunHud } from "./index";
@@ -27,11 +28,11 @@ function wedgeGeometry(w: number, h: number, len: number): THREE.BufferGeometry 
   return g;
 }
 
-function Ramp({ x, z, w, h, len }: { x: number; z: number; w: number; h: number; len: number }) {
+function Ramp({ x, z, w, h, len, y = 0 }: { x: number; z: number; w: number; h: number; len: number; y?: number }) {
   const geo = useMemo(() => wedgeGeometry(w, h, len), [w, h, len]);
   useEffect(() => () => geo.dispose(), [geo]);
   return (
-    <RigidBody type="fixed" colliders="hull" position={[x, 0, z]}>
+    <RigidBody type="fixed" colliders="hull" position={[x, y, z]}>
       <mesh geometry={geo} castShadow receiveShadow>
         <meshStandardMaterial color="#e0672a" roughness={0.7} metalness={0.1} side={THREE.DoubleSide} />
       </mesh>
@@ -39,13 +40,13 @@ function Ramp({ x, z, w, h, len }: { x: number; z: number; w: number; h: number;
   );
 }
 
-function Building({ x, z, w, h, d, color }: { x: number; z: number; w: number; h: number; d: number; color: string }) {
+function Building({ x, z, w, h, d, color, y }: { x: number; z: number; w: number; h: number; d: number; color: string; y: number }) {
   const rows = Math.max(2, Math.floor(h / 3));
   const face = x > 0 ? -w / 2 - 0.08 : w / 2 + 0.08;
   const winY: number[] = [];
   for (let r = 1; r <= rows; r++) winY.push((r / (rows + 1)) * h - h / 2);
   return (
-    <group position={[x, h / 2 - 0.5, z]}>
+    <group position={[x, h / 2 - 0.5 + y, z]}>
       <mesh receiveShadow>
         <boxGeometry args={[w, h, d]} />
         <meshStandardMaterial color={color} roughness={0.7} metalness={0.15} />
@@ -71,8 +72,11 @@ export interface SceneProps {
 }
 
 function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: SceneProps) {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const props = useMemo(() => [...buildFinale(map.pileZ), ...buildTrackStructures()], [runKey]);
+  const props = useMemo(
+    () => anchorToTerrain([...buildFinale(map.pileZ), ...buildTrackStructures()], map.terrain),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [runKey, map],
+  );
   const halfW = map.trackWidth / 2;
   const groundLen = 102;
   const groundCenterZ = 12 - groundLen / 2;
@@ -81,11 +85,13 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: 
   for (let z = 6; z > map.pileZ + 16; z -= 6) laneMarks.push(z);
 
   const palette = ["#3a5cc4", "#c44a86", "#2aa5a0", "#e0892a", "#7a4ad6", "#c43a3a"];
-  const buildings: { x: number; z: number; w: number; h: number; d: number; color: string }[] = [];
+  const buildings: { x: number; z: number; w: number; h: number; d: number; color: string; y: number }[] = [];
   for (let z = 4; z > map.pileZ - 6; z -= 9) {
     const idx = buildings.length;
-    buildings.push({ x: halfW + 7, z, w: 6, h: 8 + ((z * 5) % 14), d: 6, color: palette[idx % palette.length] });
-    buildings.push({ x: -(halfW + 7), z: z - 4, w: 6, h: 6 + ((z * 7) % 16), d: 6, color: palette[(idx + 1) % palette.length] });
+    const xr = halfW + 7;
+    const xl = -(halfW + 7);
+    buildings.push({ x: xr, z, w: 6, h: 8 + ((z * 5) % 14), d: 6, color: palette[idx % palette.length], y: heightAt(map.terrain, xr, z) });
+    buildings.push({ x: xl, z: z - 4, w: 6, h: 6 + ((z * 7) % 16), d: 6, color: palette[(idx + 1) % palette.length], y: heightAt(map.terrain, xl, z - 4) });
   }
 
   return (
@@ -127,9 +133,9 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: 
         </RigidBody>
       ))}
 
-      <Ramp x={0} z={-12} w={10} h={2.2} len={9} />
-      <Ramp x={-9} z={-34} w={8} h={2} len={8} />
-      <Ramp x={9} z={-52} w={8} h={2.4} len={9} />
+      <Ramp x={0} z={-12} w={10} h={2.2} len={9} y={heightAt(map.terrain, 0, -12)} />
+      <Ramp x={-9} z={-34} w={8} h={2} len={8} y={heightAt(map.terrain, -9, -34)} />
+      <Ramp x={9} z={-52} w={8} h={2.4} len={9} y={heightAt(map.terrain, 9, -52)} />
 
       {buildings.map((b, i) => (
         <Building key={i} {...b} />

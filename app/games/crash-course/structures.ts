@@ -5,6 +5,7 @@
  * the tall stacks balance instead of toppling the instant physics starts.
  */
 import type { PropKind } from "./scoring";
+import { heightAt, type TerrainParams } from "./engine/terrainSampler";
 
 export interface PileItem {
   kind: PropKind;
@@ -102,4 +103,20 @@ export function buildTrackStructures(): PileItem[] {
   out.push({ kind: "car", position: [-6, 1.0, -26] });
   out.push({ kind: "car", position: [6, 1.0, -46] });
   return out;
+}
+
+/**
+ * Lift every item so it rests ON the terrain at its (x, z). On flat ground
+ * (amplitude 0) heightAt is 0, so positions are returned unchanged — Downtown
+ * is behavior-preserving. Pure: no React, no Three.
+ */
+export function anchorToTerrain(items: PileItem[], terrain: TerrainParams): PileItem[] {
+  return items.map((it) => ({
+    ...it,
+    position: [
+      it.position[0],
+      it.position[1] + heightAt(terrain, it.position[0], it.position[2]),
+      it.position[2],
+    ] as [number, number, number],
+  }));
 }
