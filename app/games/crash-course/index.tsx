@@ -34,6 +34,8 @@ export default function CrashCourse() {
   hostRef.current = host;
 
   const [phase, setPhase] = useState<Phase>("intro");
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   const [count, setCount] = useState(3);
   const [runKey, setRunKey] = useState(0);
   /** performance.now() when driving began — props arm ARM_GRACE_MS later. */
@@ -118,7 +120,11 @@ export default function CrashCourse() {
   // as "destruction" and ends the run before the player can drive.
   const enterCrash = () => setPhase((p) => (p === "driving" ? "crashing" : p));
 
+  // Score only accrues while the run is live. Once the settle watcher flips us
+  // to "results", the number is frozen — props still nudging each other as the
+  // pile settles must never keep ticking the final score up.
   const onDestroyed = (kind: PropKind) => {
+    if (phaseRef.current !== "driving" && phaseRef.current !== "crashing") return;
     setScore((prev) => registerDestruction(prev, kind, performance.now()));
   };
 
@@ -161,7 +167,10 @@ export default function CrashCourse() {
         className="relative w-full max-w-[900px] rounded border-2 border-[var(--border)] overflow-hidden"
         style={{ aspectRatio: "16 / 9" }}
       >
-        <Canvas shadows camera={{ position: [0, 6, 18], fov: 55 }}>
+        {/* "percentage" = PCFShadowMap. Plain `shadows` selects the now-
+            deprecated PCFSoftShadowMap, which Three re-warns about every single
+            frame it renders shadows — that flood was the console spam. */}
+        <Canvas shadows="percentage" camera={{ position: [0, 6, 18], fov: 55 }}>
           <color attach="background" args={["#2a3f6b"]} />
           <fog attach="fog" args={["#2a3f6b", 65, 175]} />
           <Physics gravity={[0, -19, 0]} paused={phase === "intro" || phase === "ready"}>
