@@ -76,53 +76,93 @@ export default function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, a
   const groundLen = 102;
   const groundCenterZ = 12 - groundLen / 2;
 
+  // Glowing dashed centre line — reads as speed and pops under bloom.
+  const laneMarks: number[] = [];
+  for (let z = 6; z > TRACK.pileZ + 16; z -= 6) laneMarks.push(z);
+
+  // Roadside blocks for depth/parallax outside the walls.
+  const roadside: { x: number; z: number; h: number }[] = [];
+  for (let z = 6; z > TRACK.pileZ; z -= 11) {
+    const h = 4 + ((z * 7) % 5);
+    roadside.push({ x: TRACK.width / 2 + 4, z, h });
+    roadside.push({ x: -(TRACK.width / 2 + 4), z: z - 5, h: h + 2 });
+  }
+
   return (
     <>
-      <ambientLight intensity={0.55} />
-      <hemisphereLight args={["#bcd4ff", "#4a3a2a", 0.5]} />
+      <ambientLight intensity={0.4} />
+      <hemisphereLight args={["#aecbff", "#2a2016", 0.55]} />
+      {/* Warm key light casts the shadows. */}
       <directionalLight
         castShadow
-        position={[18, 32, 20]}
-        intensity={1.4}
+        color="#fff0dd"
+        position={[22, 34, 18]}
+        intensity={1.6}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-camera-left={-60}
         shadow-camera-right={60}
         shadow-camera-top={60}
         shadow-camera-bottom={-60}
-        shadow-camera-far={120}
+        shadow-camera-far={140}
       />
+      {/* Cool fill from the opposite side to shape the forms. */}
+      <directionalLight color="#6a8cff" position={[-18, 14, -12]} intensity={0.4} />
+      {/* Warm glow hanging over the carnage. */}
+      <pointLight position={[0, 7, TRACK.pileZ]} intensity={60} distance={46} decay={2} color="#ffb060" />
+
+      {/* Surrounding ground beyond the track */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.06, groundCenterZ]} receiveShadow>
+        <planeGeometry args={[500, 500]} />
+        <meshStandardMaterial color="#232b1f" roughness={1} />
+      </mesh>
 
       {/* Track surface */}
       <RigidBody type="fixed" colliders="cuboid" position={[0, -0.5, groundCenterZ]}>
         <mesh receiveShadow>
           <boxGeometry args={[TRACK.width, 1, groundLen]} />
-          <meshStandardMaterial color="#3a3f4b" roughness={0.95} />
+          <meshStandardMaterial color="#31353f" roughness={0.95} />
         </mesh>
       </RigidBody>
+
+      {/* Glowing centre-line dashes */}
+      {laneMarks.map((z) => (
+        <mesh key={z} position={[0, 0.02, z]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[0.4, 2.4]} />
+          <meshStandardMaterial color="#ffe08a" emissive="#ffcf5a" emissiveIntensity={1.4} toneMapped={false} />
+        </mesh>
+      ))}
 
       {/* Side walls */}
       {[-1, 1].map((s) => (
         <RigidBody key={s} type="fixed" colliders="cuboid" position={[s * (TRACK.width / 2), TRACK.wallHeight / 2, groundCenterZ]}>
           <mesh receiveShadow castShadow>
             <boxGeometry args={[0.6, TRACK.wallHeight, groundLen]} />
-            <meshStandardMaterial color="#5a3f6a" roughness={0.8} />
+            <meshStandardMaterial color="#4a3560" roughness={0.8} />
           </mesh>
         </RigidBody>
+      ))}
+
+      {/* Roadside blocks for depth (non-colliding decoration) */}
+      {roadside.map((b, i) => (
+        <mesh key={i} position={[b.x, b.h / 2 - 0.5, b.z]} castShadow receiveShadow>
+          <boxGeometry args={[5, b.h, 5]} />
+          <meshStandardMaterial color={i % 2 ? "#2c2740" : "#332b46"} roughness={0.9} />
+        </mesh>
       ))}
 
       {/* Back stop behind the pile so debris stays on screen */}
       <RigidBody type="fixed" colliders="cuboid" position={[0, 2, groundCenterZ - groundLen / 2 + 1]}>
         <mesh>
           <boxGeometry args={[TRACK.width, 5, 1]} />
-          <meshStandardMaterial color="#5a3f6a" roughness={0.8} />
+          <meshStandardMaterial color="#4a3560" roughness={0.8} />
         </mesh>
       </RigidBody>
 
-      {/* Finish-line marker just before the pile */}
-      <mesh position={[0, 0.02, TRACK.pileZ + 16]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[TRACK.width, 1.5]} />
-        <meshStandardMaterial color="#ffd24a" emissive="#ffd24a" emissiveIntensity={0.4} />
+      {/* Finish-line stripe just before the pile */}
+      <mesh position={[0, 0.03, TRACK.pileZ + 16]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[TRACK.width, 1.6]} />
+        <meshStandardMaterial color="#ffd24a" emissive="#ffd24a" emissiveIntensity={1.1} toneMapped={false} />
       </mesh>
 
       <Car phase={phase} hud={hud} onEnterCrash={onEnterCrash} />

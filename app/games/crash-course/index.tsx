@@ -12,6 +12,8 @@ import {
   type PropKind,
 } from "./scoring";
 import Scene from "./Scene";
+import Effects from "./Effects";
+import { fxBus } from "./fxBus";
 
 export type Phase = "intro" | "ready" | "driving" | "crashing" | "results";
 
@@ -100,6 +102,9 @@ export default function CrashCourse() {
     setHudView(freshHud());
     setScore(initialScore());
     reported.current = false;
+    fxBus.reset();
+    // Bumping runKey remounts the whole scene (car, damage, debris, pile), so
+    // every run starts from a guaranteed-clean physics world.
     setRunKey((k) => k + 1);
     setPhase("ready");
   };
@@ -157,6 +162,7 @@ export default function CrashCourse() {
           <fog attach="fog" args={["#10131c", 45, 140]} />
           <Physics gravity={[0, -19, 0]} paused={phase === "intro" || phase === "ready"}>
             <Scene
+              key={runKey}
               phase={phase}
               hud={hud.current}
               onDestroyed={onDestroyed}
@@ -165,6 +171,7 @@ export default function CrashCourse() {
               active={phase === "crashing"}
             />
           </Physics>
+          <Effects />
         </Canvas>
 
         {/* Countdown */}

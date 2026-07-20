@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
+import { RoundedBox } from "@react-three/drei";
 import { RigidBody, type RapierRigidBody } from "@react-three/rapier";
 import { CAR, NITROUS, IMPACT, TRACK } from "./config";
+import { fxBus } from "./fxBus";
 import {
   initialNitrous,
   spendNitrous,
@@ -22,6 +24,8 @@ const _fwd = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _cam = new THREE.Vector3();
+
+const SPAWN = { x: CAR.spawn[0], y: CAR.spawn[1], z: CAR.spawn[2] };
 
 /** Panels that can shed, with their body-local placement and look. */
 const PANEL_LAYOUT: Record<
@@ -70,8 +74,8 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
 
   // Keyboard. Space spends a nitrous charge (only while driving).
   useEffect(() => {
+    const i = input.current;
     const down = (e: KeyboardEvent) => {
-      const i = input.current;
       switch (e.code) {
         case "KeyW": case "ArrowUp": i.throttle = true; break;
         case "KeyS": case "ArrowDown": i.reverse = true; break;
@@ -86,7 +90,6 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
       }
     };
     const up = (e: KeyboardEvent) => {
-      const i = input.current;
       switch (e.code) {
         case "KeyW": case "ArrowUp": i.throttle = false; break;
         case "KeyS": case "ArrowDown": i.reverse = false; break;
@@ -99,6 +102,8 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      // Belt-and-braces: never leave a key "stuck" into the next run.
+      i.throttle = i.reverse = i.left = i.right = false;
     };
   }, []);
 
@@ -107,6 +112,25 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
     if (!b) return;
     const dt = Math.min(delta, 1 / 30); // clamp so a stutter can't launch the car
     const now = performance.now();
+
+    const t = b.translation();
+
+    // Sanity guard: a physics blow-up can produce NaN — snap back rather than
+    // fling the car (and camera) to infinity.
+    if (!Number.isFinite(t.x) || !Number.isFinite(t.y) || !Number.isFinite(t.z)) {
+      b.setTranslation(SPAWN, true);
+      b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      speed.current = 0;
+      return;
+    }
+
+    // Fell through the world — end the run cleanly instead of falling forever.
+    if (t.y < -25 && !crashed.current) {
+      crashed.current = true;
+      b.setEnabledRotations(true, true, true, true);
+      onEnterCrash();
+    }
 
     const rot = b.rotation();
     _q.set(rot.x, rot.y, rot.z, rot.w);
@@ -132,7 +156,6 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
     // Reaching the pile zone hands control to physics for the finale. Armed a
     // little ahead of the pile so props (and the slow movers) are already
     // "live" by the time the car ploughs into them.
-    const t = b.translation();
     if (!crashed.current && t.z < TRACK.pileZ + 18) {
       crashed.current = true;
       b.setEnabledRotations(true, true, true, true);
@@ -150,16 +173,30 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
     const k = 1 - Math.pow(0.0015, dt);
     state.camera.position.lerp(_cam, k);
     state.camera.lookAt(t.x + _fwd.x * 3, t.y + 1, t.z + _fwd.z * 3);
+
+    // Impact shake, decaying.
+    if (fxBus.shake > 0.001) {
+      const s = fxBus.shake;
+      state.camera.position.x += (Math.random() - 0.5) * s * 0.9;
+      state.camera.position.y += (Math.random() - 0.5) * s * 0.6;
+      fxBus.shake = Math.max(0, s - dt * 2.4);
+    }
   });
 
   const onContactForce = (mag: number) => {
+    const b = body.current;
+    if (!b) return;
+    // Sparks + shake for any real hit, scaled by force.
+    if (mag > IMPACT.destroyForce) {
+      const t = b.translation();
+      fxBus.triggerImpact(t.x, t.y + 0.4, t.z, Math.min(1, mag / (IMPACT.carDamageForce * 1.4)));
+    }
     if (mag < IMPACT.carDamageForce) return;
     const res = applyDamage(damageRef.current, performance.now(), IMPACT.carDamageCooldownMs);
     if (!res.applied) return;
     damageRef.current = res.state;
     setDmg(res.state);
-    const b = body.current;
-    if (res.detached && b) {
+    if (res.detached) {
       const t = b.translation();
       const r = b.rotation();
       _q.set(r.x, r.y, r.z, r.w);
@@ -183,7 +220,7 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
         ref={body}
         type="dynamic"
         colliders="cuboid"
-        position={[CAR.spawn[0], CAR.spawn[1], CAR.spawn[2]]}
+        position={[SPAWN.x, SPAWN.y, SPAWN.z]}
         density={CAR.density}
         linearDamping={CAR.linearDamping}
         angularDamping={CAR.angularDamping}
@@ -191,41 +228,41 @@ export default function Car({ phase, hud, onEnterCrash }: CarProps) {
       >
         <group scale={[1, squash, 1]}>
           {/* chassis */}
-          <mesh castShadow receiveShadow position={[0, 0, 0]}>
-            <boxGeometry args={[1.8, 0.6, 3.6]} />
-            <meshStandardMaterial color="#d64545" metalness={0.3} roughness={0.5} />
-          </mesh>
+          <RoundedBox args={[1.8, 0.6, 3.6]} radius={0.12} smoothness={3} castShadow receiveShadow>
+            <meshStandardMaterial color="#e0463f" metalness={0.15} roughness={0.45} />
+          </RoundedBox>
           {/* cabin */}
-          <mesh castShadow position={[0, 0.5, 0.15]}>
-            <boxGeometry args={[1.55, 0.55, 1.7]} />
-            <meshStandardMaterial color="#b83636" metalness={0.3} roughness={0.5} />
+          <RoundedBox args={[1.55, 0.55, 1.7]} radius={0.14} smoothness={3} position={[0, 0.5, 0.15]} castShadow>
+            <meshStandardMaterial color="#c23a34" metalness={0.15} roughness={0.45} />
+          </RoundedBox>
+          {/* windshield accent */}
+          <mesh position={[0, 0.52, 0.98]} castShadow>
+            <boxGeometry args={[1.35, 0.4, 0.08]} />
+            <meshStandardMaterial color="#9fd8ff" metalness={0.3} roughness={0.1} />
           </mesh>
           {/* shed-able panels */}
           {dmg.attached.includes("roof") && (
-            <mesh castShadow position={PANEL_LAYOUT.roof.offset}>
-              <boxGeometry args={PANEL_LAYOUT.roof.size} />
-              <meshStandardMaterial color={PANEL_LAYOUT.roof.color} />
-            </mesh>
+            <RoundedBox args={PANEL_LAYOUT.roof.size} radius={0.1} smoothness={3} position={PANEL_LAYOUT.roof.offset} castShadow>
+              <meshStandardMaterial color={PANEL_LAYOUT.roof.color} metalness={0.2} roughness={0.5} />
+            </RoundedBox>
           )}
           {dmg.attached.includes("bumper") && (
-            <mesh castShadow position={PANEL_LAYOUT.bumper.offset}>
-              <boxGeometry args={PANEL_LAYOUT.bumper.size} />
-              <meshStandardMaterial color={PANEL_LAYOUT.bumper.color} />
-            </mesh>
+            <RoundedBox args={PANEL_LAYOUT.bumper.size} radius={0.08} smoothness={3} position={PANEL_LAYOUT.bumper.offset} castShadow>
+              <meshStandardMaterial color={PANEL_LAYOUT.bumper.color} metalness={0.4} roughness={0.4} />
+            </RoundedBox>
           )}
-          {/* wheels — the front-right one is a shed-able panel */}
+          {/* wheels — cylinders; the front-right one is a shed-able panel */}
           {[
-            [-0.95, -0.45, 1.25],
-            [0.95, -0.45, 1.25],
-            [-0.95, -0.45, -1.25],
-            [0.95, -0.45, -1.25],
-          ].map(([x, y, z], i) => {
-            const isShedWheel = i === 1;
-            if (isShedWheel && !dmg.attached.includes("wheel")) return null;
+            [-0.95, -0.42, 1.25],
+            [0.95, -0.42, 1.25],
+            [-0.95, -0.42, -1.25],
+            [0.95, -0.42, -1.25],
+          ].map(([x, y, z], idx) => {
+            if (idx === 1 && !dmg.attached.includes("wheel")) return null;
             return (
-              <mesh key={i} castShadow position={[x, y, z]}>
-                <boxGeometry args={[0.5, 0.5, 0.5]} />
-                <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
+              <mesh key={idx} position={[x, y, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+                <cylinderGeometry args={[0.36, 0.36, 0.3, 18]} />
+                <meshStandardMaterial color="#141414" roughness={0.85} />
               </mesh>
             );
           })}
@@ -254,10 +291,9 @@ function Debris({ piece }: { piece: DebrisPiece }) {
   const p = PANEL_LAYOUT[piece.panel];
   return (
     <RigidBody ref={ref} position={piece.pos} colliders="cuboid" density={0.5}>
-      <mesh castShadow>
-        <boxGeometry args={p.size} />
-        <meshStandardMaterial color={p.color} />
-      </mesh>
+      <RoundedBox args={p.size} radius={0.06} smoothness={2} castShadow>
+        <meshStandardMaterial color={p.color} metalness={0.2} roughness={0.5} />
+      </RoundedBox>
     </RigidBody>
   );
 }
