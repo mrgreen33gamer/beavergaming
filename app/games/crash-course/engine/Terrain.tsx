@@ -47,6 +47,13 @@ export function Terrain({
     [params, width, length, segments],
   );
 
+  // @react-three/rapier compares `args` by reference to decide whether to
+  // rebuild the collider. `hf.heights` is a Float32Array, but the collider
+  // needs a plain number[]; memoize that conversion on `hf` so it's stable
+  // across re-renders and doesn't churn the physical heightfield on every
+  // Terrain render (e.g. from HUD/quality updates in a re-rendering parent).
+  const heightsArray = useMemo(() => Array.from(hf.heights), [hf]);
+
   return (
     <group>
       <mesh geometry={geometry} receiveShadow>
@@ -54,7 +61,7 @@ export function Terrain({
       </mesh>
       <RigidBody type="fixed" colliders={false}>
         <HeightfieldCollider
-          args={[hf.nrows - 1, hf.ncols - 1, Array.from(hf.heights), hf.scale]}
+          args={[hf.nrows - 1, hf.ncols - 1, heightsArray, hf.scale]}
         />
       </RigidBody>
     </group>
