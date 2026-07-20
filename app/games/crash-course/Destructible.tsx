@@ -4,55 +4,60 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { RoundedBox } from "@react-three/drei";
-import { RigidBody, type RapierRigidBody } from "@react-three/rapier";
+import { RigidBody, CuboidCollider, type RapierRigidBody } from "@react-three/rapier";
 import { PROP_COLOR, IMPACT } from "./config";
 import { fxBus } from "./fxBus";
+import { debrisBus } from "./debrisBus";
+import { ModelOrShape } from "./Model";
+import { CRATE_MODEL, DEBRIS_MODELS, junkCarFor, MODEL_YAW } from "./models";
 import type { PropKind } from "./scoring";
 
 /** Box dimensions per kind (metres). Cars are much bigger and heavier. */
 const SIZE: Record<PropKind, [number, number, number]> = {
-  crate: [1, 1, 1],
-  box: [1.2, 1.2, 1.2],
-  barrel: [0.95, 1.3, 0.95],
-  gold: [1, 1, 1],
-  car: [3.4, 1.3, 1.7],
+  crate: [1.6, 1.6, 1.6],
+  box: [1.9, 1.9, 1.9],
+  barrel: [1.35, 1.9, 1.35],
+  gold: [1.6, 1.6, 1.6],
+  car: [4.2, 1.6, 2.0],
 };
 
+// Styrofoam-light props fling away on contact; the "car" props stay heavy
+// enough to actually dent you.
 const DENSITY: Record<PropKind, number> = {
-  crate: 0.6,
-  box: 0.7,
-  barrel: 0.8,
-  gold: 0.9,
-  car: 1.4,
+  crate: 0.1,
+  box: 0.12,
+  barrel: 0.14,
+  gold: 0.2,
+  car: 0.7,
 };
 
 export interface DestructibleProps {
   kind: PropKind;
   position: [number, number, number];
-  /** Called once, the first time this object is smashed hard enough. */
   onDestroyed: (kind: PropKind) => void;
-  /** Optional constant drift velocity [vx, vz] for slow movers. */
   drift?: [number, number];
-  /** When false, impacts are ignored (pile is still settling / drive phase). */
-  active: boolean;
+  /** performance.now() timestamp after which impacts count (props ignore the
+   *  settling pile before this). */
+  armedAt: number;
 }
 
 /**
- * One smashable object. Stays a normal dynamic body until a contact force
- * crosses the destroy threshold, at which point it reports its value exactly
- * once, flashes, throws sparks, gets a dramatic scatter impulse, and dims.
+ * One smashable object. Cars and crates render as Kenney models; barrels, gold
+ * and generic boxes stay procedural (and flash on impact). All share an
+ * explicit cuboid collider so physics never depends on a model finishing load.
  */
 export default function Destructible({
   kind,
   position,
   onDestroyed,
   drift,
-  active,
+  armedAt,
 }: DestructibleProps) {
   const body = useRef<RapierRigidBody>(null);
   const destroyed = useRef(false);
   const flash = useRef(0);
   const size = SIZE[kind];
+  const half: [number, number, number] = [size[0] / 2, size[1] / 2, size[2] / 2];
   const baseEmissive = kind === "gold" ? 0.4 : 0;
 
   const material = useMemo(() => {
@@ -68,7 +73,6 @@ export default function Destructible({
   useEffect(() => () => material.dispose(), [material]);
 
   useFrame(() => {
-    // Slow movers keep a constant horizontal velocity until they are hit.
     if (drift && !destroyed.current) {
       const b = body.current;
       if (b) {
@@ -76,11 +80,9 @@ export default function Destructible({
         b.setLinvel({ x: drift[0], y: v.y, z: drift[1] }, true);
       }
     }
-    // Impact flash decays back to the resting emissive level.
     if (flash.current > 0) {
       flash.current = Math.max(0, flash.current - 0.055);
       material.emissiveIntensity = baseEmissive + flash.current;
-      if (flash.current === 0 && destroyed.current) material.color.multiplyScalar(0.75);
     }
   });
 
@@ -88,11 +90,15 @@ export default function Destructible({
     <RigidBody
       ref={body}
       type="dynamic"
-      colliders="cuboid"
+      colliders={false}
       position={position}
       density={DENSITY[kind]}
+      restitution={0.05}
+      linearDamping={0.4}
+      angularDamping={0.6}
+      userData={{ smashable: true }}
       onContactForce={(payload) => {
-        if (!active || destroyed.current) return;
+        if (destroyed.current || performance.now() < armedAt) return;
         if (payload.totalForceMagnitude < IMPACT.destroyForce) return;
         destroyed.current = true;
         flash.current = 1.8;
@@ -114,32 +120,43 @@ export default function Destructible({
           },
           true,
         );
+        // Smashed cars shed a couple of real parts.
+        if (kind === "car" && t) {
+          const lv = body.current?.linvel();
+          for (const model of [DEBRIS_MODELS[2], DEBRIS_MODELS[0]]) {
+            debrisBus.emit(model, [t.x, t.y + 0.6, t.z], [
+              (lv?.x ?? 0) + (Math.random() - 0.5) * 6,
+              3 + Math.random() * 3,
+              (lv?.z ?? 0) + (Math.random() - 0.5) * 6,
+            ]);
+          }
+        }
       }}
     >
-      {kind === "barrel" ? (
+      <CuboidCollider args={half} />
+
+      {kind === "car" ? (
+        <ModelOrShape
+          url={junkCarFor(position[0], position[2])}
+          fit={size[0]}
+          baseY={-half[1]}
+          yaw={MODEL_YAW.junk}
+          fallback={<ProceduralCarProp size={size} material={material} />}
+        />
+      ) : kind === "crate" ? (
+        <ModelOrShape
+          url={CRATE_MODEL}
+          fit={size[0]}
+          baseY={-half[1]}
+          yaw={MODEL_YAW.crate}
+          fallback={
+            <RoundedBox args={size} radius={0.07} smoothness={3} material={material} castShadow receiveShadow />
+          }
+        />
+      ) : kind === "barrel" ? (
         <mesh material={material} castShadow receiveShadow>
           <cylinderGeometry args={[size[0] / 2, size[0] / 2, size[1], 16]} />
         </mesh>
-      ) : kind === "car" ? (
-        <group>
-          <RoundedBox
-            args={[size[0], size[1] * 0.62, size[2]]}
-            radius={0.14}
-            smoothness={3}
-            position={[0, -size[1] * 0.18, 0]}
-            material={material}
-            castShadow
-            receiveShadow
-          />
-          <RoundedBox
-            args={[size[0] * 0.66, size[1] * 0.5, size[2] * 0.6]}
-            radius={0.14}
-            smoothness={3}
-            position={[0, size[1] * 0.28, 0]}
-            material={material}
-            castShadow
-          />
-        </group>
       ) : (
         <RoundedBox
           args={size}
@@ -151,5 +168,35 @@ export default function Destructible({
         />
       )}
     </RigidBody>
+  );
+}
+
+function ProceduralCarProp({
+  size,
+  material,
+}: {
+  size: [number, number, number];
+  material: THREE.Material;
+}) {
+  return (
+    <group>
+      <RoundedBox
+        args={[size[0], size[1] * 0.62, size[2]]}
+        radius={0.14}
+        smoothness={3}
+        position={[0, -size[1] * 0.18, 0]}
+        material={material}
+        castShadow
+        receiveShadow
+      />
+      <RoundedBox
+        args={[size[0] * 0.66, size[1] * 0.5, size[2] * 0.6]}
+        radius={0.14}
+        smoothness={3}
+        position={[0, size[1] * 0.28, 0]}
+        material={material}
+        castShadow
+      />
+    </group>
   );
 }

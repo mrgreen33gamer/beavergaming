@@ -19,7 +19,7 @@ export const CAR = {
   linearDamping: 0.6,
   angularDamping: 4,
   density: 1.1, // Rapier derives mass from collider density
-  spawn: [0, 1.2, 6] as const, // start near the top of the track
+  spawn: [0, 0.75, 8] as const, // basically on the ground so the drop can't dent it
 };
 
 // --- Nitrous: 3 charges, moderate boost, control not launch ---------------
@@ -33,9 +33,9 @@ export const NITROUS = {
 
 // --- Track ----------------------------------------------------------------
 export const TRACK = {
-  width: 22,
+  width: 34, // wide open — plenty of room to line up hits and weave
   length: 150, // runs from +z (start) toward -z (pile)
-  wallHeight: 2,
+  wallHeight: 2.5,
   /** Slight downhill toward the pile so speed builds into the finale. */
   drop: 6,
   pileZ: -66, // where the destruction zone sits
@@ -43,14 +43,31 @@ export const TRACK = {
 
 // --- Impact detection -----------------------------------------------------
 export const IMPACT = {
-  /** Contact-force magnitude that counts a destructible as destroyed. */
-  destroyForce: 900,
-  /** Contact-force on the car that knocks a panel off + squashes the body. */
-  carDamageForce: 1600,
+  /** Contact-force magnitude that counts a destructible as destroyed. Lower =
+   *  easier to knock things over (styrofoam props barely resist). */
+  destroyForce: 280,
+  /** Contact-force on the car that dents/crumples the body + sheds a part.
+   *  High: the car is tough, so it takes a real car-to-car slam to damage it,
+   *  never a foam crate or a scrape. */
+  carDamageForce: 1100,
   /** Min ms between successive car-damage events (rate limit). */
-  carDamageCooldownMs: 250,
+  carDamageCooldownMs: 220,
   /** Extra impulse added to a destroyed body for drama. */
-  scatterImpulse: 6,
+  scatterImpulse: 14,
+};
+
+/** Props ignore impacts for this long after a run starts, so the settling
+ *  pile never counts as "smashed". */
+export const ARM_GRACE_MS = 1200;
+
+/** Min ms between spark bursts on the player car — stops a prop resting on the
+ *  roof from spawning particles every single frame. */
+export const CAR_FX_COOLDOWN_MS = 90;
+
+/** Shed-debris housekeeping so parts never accumulate or rest on the car. */
+export const DEBRIS = {
+  maxAlive: 16,
+  lifetimeMs: 5000,
 };
 
 // --- Run settle -----------------------------------------------------------

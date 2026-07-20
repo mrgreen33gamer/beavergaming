@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { useCartridge } from "@/lib/platform/useCartridge";
-import { NITROUS, SETTLE } from "./config";
+import { NITROUS, SETTLE, ARM_GRACE_MS } from "./config";
 import {
   initialScore,
   registerDestruction,
@@ -36,6 +36,8 @@ export default function CrashCourse() {
   const [phase, setPhase] = useState<Phase>("intro");
   const [count, setCount] = useState(3);
   const [runKey, setRunKey] = useState(0);
+  /** performance.now() when driving began — props arm ARM_GRACE_MS later. */
+  const [driveStartMs, setDriveStartMs] = useState<number | null>(null);
   const [score, setScore] = useState<ScoreState>(initialScore());
   const scoreRef = useRef(score);
   scoreRef.current = score;
@@ -52,6 +54,7 @@ export default function CrashCourse() {
       setCount((c) => {
         if (c <= 1) {
           clearInterval(iv);
+          setDriveStartMs(performance.now());
           setPhase("driving");
           return 0;
         }
@@ -101,6 +104,7 @@ export default function CrashCourse() {
     hud.current = freshHud();
     setHudView(freshHud());
     setScore(initialScore());
+    setDriveStartMs(null);
     reported.current = false;
     fxBus.reset();
     // Bumping runKey remounts the whole scene (car, damage, debris, pile), so
@@ -158,8 +162,8 @@ export default function CrashCourse() {
         style={{ aspectRatio: "16 / 9" }}
       >
         <Canvas shadows camera={{ position: [0, 6, 18], fov: 55 }}>
-          <color attach="background" args={["#10131c"]} />
-          <fog attach="fog" args={["#10131c", 45, 140]} />
+          <color attach="background" args={["#2a3f6b"]} />
+          <fog attach="fog" args={["#2a3f6b", 65, 175]} />
           <Physics gravity={[0, -19, 0]} paused={phase === "intro" || phase === "ready"}>
             <Scene
               key={runKey}
@@ -168,7 +172,7 @@ export default function CrashCourse() {
               onDestroyed={onDestroyed}
               onEnterCrash={enterCrash}
               runKey={runKey}
-              active={phase === "crashing"}
+              armedAt={driveStartMs === null ? Infinity : driveStartMs + ARM_GRACE_MS}
             />
           </Physics>
           <Effects />

@@ -6,15 +6,18 @@
  * boundary. A plain singleton sidesteps that: the Effects manager registers a
  * `spawn` handler, everyone else just calls `triggerImpact`.
  *
- * State here is purely transient FX (never gameplay), so it does not matter
- * that it outlives a per-run remount — `reset()` clears it at the start of a
- * run anyway.
+ * A hard global throttle on particle spawns means that even if dozens of
+ * bodies are grinding against each other, sparks are emitted at a bounded
+ * rate — shake still registers, but the particle pool can never run away.
  */
+
+/** Minimum ms between particle bursts, regardless of how many bodies hit. */
+const SPAWN_INTERVAL_MS = 40;
+
 export interface FxBus {
-  /** Set by the Effects manager while it is mounted. */
   spawn: ((x: number, y: number, z: number, strength: number) => void) | null;
-  /** Current camera-shake amount (0..1), decayed by the camera each frame. */
   shake: number;
+  lastSpawn: number;
   triggerImpact(x: number, y: number, z: number, strength: number): void;
   addShake(amount: number): void;
   reset(): void;
@@ -23,15 +26,20 @@ export interface FxBus {
 export const fxBus: FxBus = {
   spawn: null,
   shake: 0,
+  lastSpawn: 0,
   triggerImpact(x, y, z, strength) {
     const s = Math.max(0, Math.min(1, strength));
-    this.spawn?.(x, y, z, s);
     this.addShake(s * 0.6);
+    const now = performance.now();
+    if (now - this.lastSpawn < SPAWN_INTERVAL_MS) return; // throttled — shake only
+    this.lastSpawn = now;
+    this.spawn?.(x, y, z, s);
   },
   addShake(amount) {
     this.shake = Math.min(1, this.shake + amount);
   },
   reset() {
     this.shake = 0;
+    this.lastSpawn = 0;
   },
 };
