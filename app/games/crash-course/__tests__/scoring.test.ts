@@ -79,6 +79,12 @@ describe("scoring — weighted destruction + combo", () => {
     expect(s0.total).toBe(0);
     expect(s0.destroyed).toBe(0);
   });
+
+  it("scores the new light props below the heavy ones", () => {
+    expect(PROP_VALUES.cone).toBe(15);
+    expect(PROP_VALUES.cone).toBeLessThan(PROP_VALUES.barrel);
+    expect(PROP_VALUES.signpost).toBeGreaterThan(PROP_VALUES.cone);
+  });
 });
 
 describe("nitrous accounting", () => {

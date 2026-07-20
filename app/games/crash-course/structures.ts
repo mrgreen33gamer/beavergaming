@@ -14,7 +14,10 @@ export interface PileItem {
 }
 
 // Rough footprints (must match Destructible SIZE) so stacks sit flush.
-const H = { crate: 1.6, box: 1.9, barrel: 1.9, gold: 1.6, car: 1.6 };
+const H = {
+  crate: 1.6, box: 1.9, barrel: 1.9, gold: 1.6, car: 1.6,
+  cone: 1.1, hydrant: 1.1, signpost: 2.6, fence: 1.4,
+};
 
 /** A vertical column `count` high of one kind. */
 function tower(x: number, z: number, count: number, kind: PropKind, out: PileItem[]) {

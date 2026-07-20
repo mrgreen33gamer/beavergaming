@@ -94,4 +94,8 @@ export const PROP_COLOR: Record<PropKind, string> = {
   barrel: "#d63d3d",
   gold: "#ffd24a",
   car: "#4a7bd6",
+  cone: "#ff6a1f",
+  hydrant: "#c8352b",
+  signpost: "#3ba35a",
+  fence: "#8a8f96",
 };

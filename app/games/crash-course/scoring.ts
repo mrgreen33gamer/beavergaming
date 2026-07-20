@@ -8,7 +8,9 @@
 
 // --- Destructibles --------------------------------------------------------
 
-export type PropKind = "crate" | "box" | "barrel" | "gold" | "car";
+export type PropKind =
+  | "crate" | "box" | "barrel" | "gold" | "car"
+  | "cone" | "hydrant" | "signpost" | "fence";
 
 /** Weighted destruction: colour/type carries the value. */
 export const PROP_VALUES: Record<PropKind, number> = {
@@ -17,6 +19,10 @@ export const PROP_VALUES: Record<PropKind, number> = {
   barrel: 50,
   gold: 200,
   car: 300,
+  cone: 15,
+  hydrant: 40,
+  fence: 30,
+  signpost: 60,
 };
 
 // --- Combo scoring --------------------------------------------------------
