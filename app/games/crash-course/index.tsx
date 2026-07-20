@@ -7,6 +7,7 @@ import { NITROUS, ARM_GRACE_MS } from "./config";
 import {
   initialScore,
   registerDestruction,
+  comboShake,
   type ScoreState,
   type PropKind,
 } from "./scoring";
@@ -131,7 +132,13 @@ export default function CrashCourse() {
   // pile settles must never keep ticking the final score up.
   const onDestroyed = useCallback((kind: PropKind) => {
     if (phaseRef.current !== "driving" && phaseRef.current !== "crashing") return;
-    setScore((prev) => registerDestruction(prev, kind, performance.now()));
+    setScore((prev) => {
+      const next = registerDestruction(prev, kind, performance.now());
+      // Escalating juice: a longer chain shakes the camera harder. fxBus.shake
+      // is clamped to 1 internally, so this can never run away.
+      fxBus.addShake(comboShake(next.multiplier));
+      return next;
+    });
   }, []);
 
   const running = phase === "driving" || phase === "crashing";
@@ -145,7 +152,14 @@ export default function CrashCourse() {
           <span className="text-[var(--crt-green)]">{score.total.toLocaleString()}</span>
         </span>
         {score.multiplier > 1 && running && (
-          <span className="px-2 py-0.5 rounded bg-[var(--accent-hot)]/30 text-[var(--accent-hot)] flicker">
+          <span
+            key={score.multiplier}
+            className="px-2 py-0.5 rounded bg-[var(--accent-hot)]/30 text-[var(--accent-hot)] flicker origin-center transition-transform duration-150"
+            style={{
+              transform: `scale(${Math.min(1.9, 1 + score.multiplier * 0.06)})`,
+              textShadow: `0 0 ${Math.min(14, score.multiplier)}px var(--accent-hot)`,
+            }}
+          >
             COMBO ×{score.multiplier}
           </span>
         )}
