@@ -4,8 +4,9 @@ import { useEffect, useMemo, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { useGLTF } from "@react-three/drei";
 import { DEBRIS_MODELS } from "./models";
+import { accrueDeform, PANEL_DEFORM_BUDGET } from "./scoring";
 
-const DENT_RADIUS = 0.9;
+const DENT_RADIUS = 0.7;
 
 export interface VehicleApi {
   /** Deform the body mesh at a world-space impact point. */
@@ -88,10 +89,16 @@ export function VehicleModel({ url, fit, baseY, yaw, apiRef }: VehicleProps) {
     const wv = new THREE.Vector3();
     const lp = new THREE.Vector3();
     let detachIdx = 0;
+    let deformUsed = 0;
 
     apiRef.current = {
       dent: (worldPoint, worldDir, strength) => {
-        const push = Math.min(0.75, strength);
+        // Budgeted plastic crumple: a deeper base push than before, but the run
+        // total is clamped so the body wrecks progressively and never inverts.
+        const want = Math.min(0.9, strength) * 0.7;
+        const { used, applied } = accrueDeform(deformUsed, want, PANEL_DEFORM_BUDGET);
+        deformUsed = used;
+        if (applied <= 0) return;
         for (const m of state.bodyMeshes) {
           m.updateWorldMatrix(true, false);
           inv.copy(m.matrixWorld).invert();
@@ -102,7 +109,8 @@ export function VehicleModel({ url, fit, baseY, yaw, apiRef }: VehicleProps) {
             const d = wv.distanceTo(worldPoint);
             if (d < DENT_RADIUS) {
               const f = 1 - d / DENT_RADIUS;
-              wv.addScaledVector(worldDir, push * f * f);
+              // f*f*f gives a sharper, more localized crater than the old f*f.
+              wv.addScaledVector(worldDir, applied * f * f * f);
               lp.copy(wv).applyMatrix4(inv);
               attr.setXYZ(i, lp.x, lp.y, lp.z);
               touched = true;

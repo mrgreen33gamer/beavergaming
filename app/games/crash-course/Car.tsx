@@ -73,6 +73,7 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car }:
   const lastFx = useRef(0);
   const vehicle = useRef<VehicleApi | null>(null);
   const damageRef = useRef(initialDamage());
+  const lastDent = useRef(0);
 
   // Terrain-aware ride height: the car spawns/resets on top of the ground at
   // its (x, z), not at a fixed world Y. On Downtown (amplitude 0) heightAt
@@ -230,31 +231,35 @@ export default function Car({ phase, hud, onEnterCrash, armedAt, terrain, car }:
       lastFx.current = now;
       fxBus.triggerImpact(t.x, t.y + 0.4, t.z, Math.min(1, mag / (IMPACT.carDamageForce * 1.4)));
     }
-    if (mag < handling.damageForce || now < armedAt) return;
+    if (now < armedAt) return;
 
+    // --- Light crumple path: dents on ordinary impacts. -------------------
+    if (mag >= IMPACT.dentForce && now - lastDent.current > IMPACT.dentCooldownMs) {
+      lastDent.current = now;
+      const o = p.other.rigidBody?.translation();
+      let px = t.x, py = t.y + 0.2, pz = t.z;
+      let dx = _fwd.x, dy = -0.2, dz = _fwd.z;
+      if (o) {
+        const vx = o.x - t.x, vy = o.y - t.y, vz = o.z - t.z;
+        const dist = Math.hypot(vx, vy, vz) || 1;
+        const nx = vx / dist, ny = vy / dist, nz = vz / dist;
+        const reach = Math.min(dist, 2.2);
+        px = t.x + nx * reach; py = t.y + ny * reach; pz = t.z + nz * reach;
+        dx = -nx; dy = -Math.abs(ny) * 0.5 - 0.1; dz = -nz;
+      }
+      vehicle.current?.dent(
+        new THREE.Vector3(px, py, pz),
+        new THREE.Vector3(dx, dy, dz).normalize(),
+        Math.min(0.9, 0.3 + mag / 6000),
+      );
+    }
+
+    // --- Heavy path: shed a real part on genuine slams only. --------------
+    if (mag < handling.damageForce) return;
     const res = applyDamage(damageRef.current, now, IMPACT.carDamageCooldownMs);
     if (!res.applied) return;
     damageRef.current = res.state;
 
-    // Impact point + inward direction, from the other body's position.
-    const o = p.other.rigidBody?.translation();
-    let px = t.x, py = t.y + 0.2, pz = t.z;
-    let dx = _fwd.x, dy = -0.2, dz = _fwd.z;
-    if (o) {
-      const vx = o.x - t.x, vy = o.y - t.y, vz = o.z - t.z;
-      const dist = Math.hypot(vx, vy, vz) || 1;
-      const nx = vx / dist, ny = vy / dist, nz = vz / dist;
-      const reach = Math.min(dist, 2.2);
-      px = t.x + nx * reach; py = t.y + ny * reach; pz = t.z + nz * reach;
-      dx = -nx; dy = -Math.abs(ny) * 0.5 - 0.1; dz = -nz;
-    }
-    vehicle.current?.dent(
-      new THREE.Vector3(px, py, pz),
-      new THREE.Vector3(dx, dy, dz).normalize(),
-      Math.min(0.7, 0.25 + mag / 8000),
-    );
-
-    // Shed a real part (wheel/spoiler) from the car at the impact.
     const part = vehicle.current?.detachNext();
     if (part) {
       const lv = b.linvel();
