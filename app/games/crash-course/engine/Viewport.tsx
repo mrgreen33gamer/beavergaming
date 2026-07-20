@@ -36,7 +36,18 @@ export class CrashErrorBoundary extends Component<
   }
 }
 
-/** Probes the live GPU once and reports context-loss/restore to the parent. */
+/**
+ * Probes the live GPU once and reports context-loss/restore to the parent.
+ *
+ * The parent (`Viewport`) is unmemoized and re-renders frequently during play
+ * (score/timer updates), which recreates the `onTier`/`onContextLost`/
+ * `onContextRestored` callbacks on every render. To keep the GPU probe and
+ * the context-loss listeners truly "once per mount", the latest callbacks are
+ * stashed in refs and the effect below depends only on `gl` — so a parent
+ * re-render never tears down and re-adds the listeners, and never re-probes
+ * (a `hasProbed` ref belt-and-suspenders against that even if `gl` itself
+ * were ever to change identity).
+ */
 function GlWatchdog({
   onTier,
   onContextLost,
@@ -47,31 +58,45 @@ function GlWatchdog({
   onContextRestored: () => void;
 }) {
   const gl = useThree((s) => s.gl);
+
+  const onTierRef = useRef(onTier);
+  const onContextLostRef = useRef(onContextLost);
+  const onContextRestoredRef = useRef(onContextRestored);
+  useEffect(() => {
+    onTierRef.current = onTier;
+    onContextLostRef.current = onContextLost;
+    onContextRestoredRef.current = onContextRestored;
+  }, [onTier, onContextLost, onContextRestored]);
+
+  const hasProbed = useRef(false);
   useEffect(() => {
     const canvas = gl.domElement;
     // One-time GPU probe -> initial tier.
-    try {
-      const ext = gl.getContext().getExtension("WEBGL_debug_renderer_info");
-      const renderer = ext
-        ? (gl.getContext().getParameter(ext.UNMASKED_RENDERER_WEBGL) as string)
-        : "";
-      const maxTex = gl.getContext().getParameter(gl.getContext().MAX_TEXTURE_SIZE) as number;
-      onTier(detectTier({ renderer, maxTextureSize: maxTex }));
-    } catch {
-      /* keep the provider default */
+    if (!hasProbed.current) {
+      hasProbed.current = true;
+      try {
+        const ext = gl.getContext().getExtension("WEBGL_debug_renderer_info");
+        const renderer = ext
+          ? (gl.getContext().getParameter(ext.UNMASKED_RENDERER_WEBGL) as string)
+          : "";
+        const maxTex = gl.getContext().getParameter(gl.getContext().MAX_TEXTURE_SIZE) as number;
+        onTierRef.current(detectTier({ renderer, maxTextureSize: maxTex }));
+      } catch {
+        /* keep the provider default */
+      }
     }
     const lost = (e: Event) => {
       e.preventDefault(); // lets Three restore instead of dying
-      onContextLost();
+      onContextLostRef.current();
     };
-    const restored = () => onContextRestored();
+    const restored = () => onContextRestoredRef.current();
     canvas.addEventListener("webglcontextlost", lost as EventListener);
     canvas.addEventListener("webglcontextrestored", restored);
     return () => {
       canvas.removeEventListener("webglcontextlost", lost as EventListener);
       canvas.removeEventListener("webglcontextrestored", restored);
     };
-  }, [gl, onTier, onContextLost, onContextRestored]);
+  }, [gl]);
   return null;
 }
 
@@ -88,7 +113,6 @@ export function Viewport({
 }) {
   const { settings, setTier } = useQuality();
   const [lostAt, setLostAt] = useState<number | null>(null);
-  const glKey = useRef(0);
 
   return (
     <CrashErrorBoundary>
@@ -105,10 +129,7 @@ export function Viewport({
         <GlWatchdog
           onTier={setTier}
           onContextLost={() => setLostAt(Date.now())}
-          onContextRestored={() => {
-            glKey.current += 1;
-            setLostAt(null);
-          }}
+          onContextRestored={() => setLostAt(null)}
         />
         {children}
       </Canvas>
