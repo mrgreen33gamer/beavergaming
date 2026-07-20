@@ -6,6 +6,7 @@ import { RigidBody } from "@react-three/rapier";
 import Car from "./Car";
 import Destructible from "./Destructible";
 import DebrisManager from "./DebrisManager";
+import { Terrain } from "./engine/Terrain.tsx";
 import { buildFinale, buildTrackStructures } from "./structures";
 import { TRACK } from "./config";
 import type { PropKind } from "./scoring";
@@ -108,17 +109,7 @@ function Scene({ phase, hud, onDestroyed, onEnterCrash, runKey, armedAt, map }: 
       <directionalLight color="#7aa0ff" position={[-20, 16, -12]} intensity={0.5} />
       <pointLight position={[0, 10, map.pileZ + 4]} intensity={45} distance={70} decay={2} color="#ffb060" />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.06, groundCenterZ]} receiveShadow>
-        <planeGeometry args={[600, 600]} />
-        <meshStandardMaterial color="#26331f" roughness={1} />
-      </mesh>
-
-      <RigidBody type="fixed" colliders="cuboid" position={[0, -0.5, groundCenterZ]}>
-        <mesh receiveShadow>
-          <boxGeometry args={[map.trackWidth, 1, groundLen]} />
-          <meshStandardMaterial color="#3a3f4b" roughness={0.9} />
-        </mesh>
-      </RigidBody>
+      <Terrain params={map.terrain} width={200} length={200} />
 
       {laneMarks.map((z) => (
         <mesh key={z} position={[0, 0.12, z]} rotation={[-Math.PI / 2, 0, 0]}>
