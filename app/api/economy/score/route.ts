@@ -4,7 +4,13 @@ import { getServerEconomy } from "@/lib/platform/server/getServerEconomy";
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as { gameId?: string; score?: number; runId?: string };
+    let body: { gameId?: string; score?: number; runId?: string };
+    try {
+      body = (await req.json()) as { gameId?: string; score?: number; runId?: string };
+    } catch {
+      // Empty or non-JSON body is a malformed request, not a server fault.
+      return NextResponse.json({ error: "invalid body" }, { status: 400 });
+    }
     const gameId = typeof body.gameId === "string" ? body.gameId : "";
     const score = typeof body.score === "number" ? body.score : NaN;
     if (!gameId || !Number.isFinite(score)) {
