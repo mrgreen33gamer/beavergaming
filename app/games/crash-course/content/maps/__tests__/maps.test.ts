@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { MAPS, DEFAULT_MAP_ID, getMap } from "../index";
+import { DEFAULT_MAP_ID, getMap } from "../index";
 
 describe("map registry", () => {
   it("has the downtown default", () => {

@@ -7,7 +7,9 @@ import { SETTLE } from "../config";
  * Watches a live speed ref while `active`, and fires `onSettled` exactly once
  * when everything comes to rest (speed < restSpeed held for restHoldMs) or the
  * maxCrashMs hard cap trips — so a jittering body can never hang the run.
- * Lifted verbatim from the old inline effect in index.tsx.
+ * Extracted from the old inline effect in index.tsx; the rest window is
+ * stamped at activation (an immediate check on setup) so the hold is measured
+ * from the true start of rest rather than one interval tick later.
  */
 export function useSettle(
   active: boolean,
